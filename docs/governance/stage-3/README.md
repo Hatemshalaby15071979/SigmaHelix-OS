@@ -19,6 +19,7 @@
 | 6 | [`SIGMAHELIX_MASTER_PLAN_2026-11-01.md`](SIGMAHELIX_MASTER_PLAN_2026-11-01.md) | v1 plan — **superseded** by document 3; kept for history |
 | 7 | [`TOMMY_CAREER_COACH_SPEC_2026-11-01.md`](TOMMY_CAREER_COACH_SPEC_2026-11-01.md) | v1 Tommy spec — role, constitution, and career workflows remain valid; runtime superseded by document 4 |
 | 8 | [`PROJECT_INVENTORY.csv`](PROJECT_INVENTORY.csv) | Machine-readable inventory for dashboards and future automation |
+| 9 | [`CORRECTION_NOTICE_2026-11-01.md`](../stage-2/CORRECTION_NOTICE_2026-11-01.md) and [`FINAL_REPORT.md`](../stage-2/FINAL_REPORT.md) | Read the correction notice with the retained historical report; the notice controls its claims |
 
 ---
 
