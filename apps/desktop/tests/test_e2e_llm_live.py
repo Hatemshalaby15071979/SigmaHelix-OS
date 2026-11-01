@@ -3,6 +3,7 @@
 Run manually:  pytest tests/test_e2e_llm_live.py -v
 These are skipped automatically when the server or a model is missing.
 """
+
 import json
 import os
 import sys
@@ -40,7 +41,8 @@ SERVER_UP = _server_up()
 
 requires_ollama = pytest.mark.skipif(
     not SERVER_UP or OLLAMA_MODEL not in _models(),
-    reason=f"Ollama/{OLLAMA_MODEL} not reachable at {OLLAMA_HOSTS}")
+    reason=f"Ollama/{OLLAMA_MODEL} not reachable at {OLLAMA_HOSTS}",
+)
 
 
 @pytest.fixture
@@ -63,8 +65,9 @@ def test_llm_intent_create_task(live_agent):
     """Natural 'I need to ship X' must become a real task row."""
     out = live_agent.process_command("remind me to prepare the QBR deck for Friday")
     tasks = live_agent.tasks.list_tasks("list")
-    assert "prepare the QBR deck" in tasks.lower() or "qbr deck" in out.lower(), \
+    assert "prepare the QBR deck" in tasks.lower() or "qbr deck" in out.lower(), (
         f"LLM intent parse failed. reply={out!r}\ntasks={tasks!r}"
+    )
 
 
 @requires_ollama

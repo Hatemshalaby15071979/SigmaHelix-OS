@@ -1,38 +1,62 @@
 """Offline E2E: agent keyword routing, managers, data gating. No LLM needed."""
+
 import datetime
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import agent as agent_mod
 from agent import Agent
-from tasks import TasksManager, NotesManager, ProjectsManager, CalendarManager, LauncherManager
+from tasks import (
+    TasksManager,
+    NotesManager,
+    ProjectsManager,
+    CalendarManager,
+    LauncherManager,
+)
 import voice as voice_mod
 from local_endpoints import is_loopback_url
 
 import pytest
 
 EXPECTED_REPOS = [
-    "Blue Waves Music Production", "CompliProof", "Dynamic-Ops-Automation-Engine",
-    "Helix-Education", "Helix-Prime", "L-D-Command-Center", "RTA_command_center",
-    "Study-Studio", "cx-sentiment-sentinel", "live-support-assistant",
-    "wfm-forecasting-calculator", "work-samples",
+    "Blue Waves Music Production",
+    "CompliProof",
+    "Dynamic-Ops-Automation-Engine",
+    "Helix-Education",
+    "Helix-Prime",
+    "L-D-Command-Center",
+    "RTA_command_center",
+    "Study-Studio",
+    "cx-sentiment-sentinel",
+    "live-support-assistant",
+    "wfm-forecasting-calculator",
+    "work-samples",
 ]
 
 
-@pytest.mark.parametrize("endpoint", [
-    "http://localhost:11435", "http://127.0.0.1:11435", "https://[::1]:11435",
-])
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "http://localhost:11435",
+        "http://127.0.0.1:11435",
+        "https://[::1]:11435",
+    ],
+)
 def test_local_endpoint_accepts_loopback(endpoint):
     assert is_loopback_url(endpoint)
 
 
-@pytest.mark.parametrize("endpoint", [
-    "https://example.com", "http://192.168.1.8:11435",
-    "http://localhost.attacker.invalid", "http://localhost@evil.invalid",
-    "file:///tmp/model",
-])
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "https://example.com",
+        "http://192.168.1.8:11435",
+        "http://localhost.attacker.invalid",
+        "http://localhost@evil.invalid",
+        "file:///tmp/model",
+    ],
+)
 def test_local_endpoint_rejects_non_loopback_or_ambiguous_url(endpoint):
     assert not is_loopback_url(endpoint)
 
@@ -45,6 +69,7 @@ def offline_agent(monkeypatch):
 
 
 # ---------------- tasks ----------------
+
 
 def test_task_create_list_complete_delete(offline_agent):
     mgr = TasksManager()
@@ -68,6 +93,7 @@ def test_task_bad_id_handled(offline_agent):
 
 # ---------------- notes ----------------
 
+
 def test_notes_crud(offline_agent):
     mgr = NotesManager()
     r = mgr.create_note("create note call the accountant at 3pm")
@@ -84,6 +110,7 @@ def test_note_filtering(offline_agent):
 
 
 # ---------------- calendar ----------------
+
 
 def test_calendar_today_tomorrow(offline_agent):
     cal = CalendarManager()
@@ -109,6 +136,7 @@ def test_calendar_schedule_and_read(offline_agent):
 
 # ---------------- projects + explorer (real filesystem) ----------------
 
+
 def test_projects_lists_all_repos(offline_agent):
     prj = ProjectsManager()
     listing = prj.list_projects("show projects")
@@ -123,6 +151,7 @@ def test_explorer_scans_exes(offline_agent):
 
 
 # ---------------- agent routing ----------------
+
 
 def test_agent_routes_tasks_offline(offline_agent):
     r = offline_agent.process_command("create task audit expense receipts")
@@ -147,6 +176,7 @@ def test_agent_empty_input(offline_agent):
 
 # ---------------- voice (offline-safe) ----------------
 
+
 def test_voice_lazy_init_no_mic_crash(offline_agent):
     engine = offline_agent.voice_engine  # must not raise even without mic
     assert engine is not None
@@ -154,13 +184,18 @@ def test_voice_lazy_init_no_mic_crash(offline_agent):
     assert "hello from test" in stub
 
 
-def test_voice_input_stays_local_without_offline_transcriber(offline_agent, monkeypatch):
+def test_voice_input_stays_local_without_offline_transcriber(
+    offline_agent, monkeypatch
+):
     engine = offline_agent.voice_engine
     mic_calls = []
     google_calls = []
     monkeypatch.setattr(voice_mod.sr, "Microphone", lambda: mic_calls.append(True))
-    monkeypatch.setattr(engine.recognizer, "recognize_google",
-                        lambda audio: google_calls.append(audio) or "unexpected")
+    monkeypatch.setattr(
+        engine.recognizer,
+        "recognize_google",
+        lambda audio: google_calls.append(audio) or "unexpected",
+    )
 
     assert engine.mic_available is False
     assert engine.record_phrase() is None
@@ -171,22 +206,30 @@ def test_voice_input_stays_local_without_offline_transcriber(offline_agent, monk
 
 # ---------------- launcher (no subprocess run; verify path guards) ----------------
 
+
 def test_launcher_missing_path_reports(tmp_path):
-    l = LauncherManager()
-    l.study_studio_path = str(tmp_path / "nope")
-    out = l.launch_study_studio("launch study studio")
+    launcher = LauncherManager()
+    launcher.study_studio_path = str(tmp_path / "nope")
+    out = launcher.launch_study_studio("launch study studio")
     assert "not found" in out.lower()
 
 
 # ---------------- TTS discipline: NEVER automatic, always on demand ----------------
+
 
 def test_process_command_never_speaks(offline_agent):
     """Regression: agent replies must not trigger TTS on their own."""
     calls = []
     orig = type(offline_agent.voice_engine).speak_text
     offline_agent.voice_engine.speak_text = lambda *a, **k: calls.append(a) or True
-    for cmd in ("hello", "create task write report", "list tasks", "view notes",
-                "today", "show projects"):
+    for cmd in (
+        "hello",
+        "create task write report",
+        "list tasks",
+        "view notes",
+        "today",
+        "show projects",
+    ):
         offline_agent.process_command(cmd)
     assert calls == [], "process_command triggered automatic TTS: {}".format(calls)
     offline_agent.voice_engine.speak_text = orig
@@ -196,10 +239,10 @@ def test_listen_is_on_demand(offline_agent):
     calls = []
     offline_agent.voice_engine.speak_text = lambda *a, **k: calls.append(a) or True
     offline_agent.process_command("create task buy milk")
-    assert calls == []                     # reply alone is silent
-    offline_agent.process_command("listen hello world")   # explicit ask -> speaks
+    assert calls == []  # reply alone is silent
+    offline_agent.process_command("listen hello world")  # explicit ask -> speaks
     assert len(calls) == 1
-    offline_agent.voice_engine.speak_text = orig = None
+    offline_agent.voice_engine.speak_text = None
 
 
 def test_stop_speech_command(offline_agent):

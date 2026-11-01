@@ -8,6 +8,7 @@ Interactive REPL on top of the LLM-first agent:
 TTS is ON DEMAND only: `listen` re-speaks the last reply as sound,
 `stop` cuts off speech. Nothing is spoken automatically.
 """
+
 import signal
 import sys
 
@@ -20,8 +21,11 @@ BANNER = """══════════════════════�
 
 def main():
     agent = Agent()
-    mode = ("🤖 local model: {} @ {}".format(agent.model, agent.host)
-            if agent.llm_available else "🟡 LLM offline — keyword mode (start server to enable chat)")
+    mode = (
+        "🤖 local model: {} @ {}".format(agent.model, agent.host)
+        if agent.llm_available
+        else "🟡 LLM offline — keyword mode (start server to enable chat)"
+    )
 
     print(BANNER)
     print(" " + mode)

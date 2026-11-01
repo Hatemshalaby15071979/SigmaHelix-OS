@@ -1,4 +1,5 @@
 """Validation for HTTP endpoints that are allowed to receive local user data."""
+
 import ipaddress
 from urllib.parse import urlsplit
 

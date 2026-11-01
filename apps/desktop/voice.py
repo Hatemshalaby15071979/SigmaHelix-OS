@@ -9,6 +9,7 @@ e.g. the GUI 🔊 Listen button or the console `listen` command.
 Controls: speak_text(), stop_speaking(); always-on mute by simply never
 calling speak_text.
 """
+
 import threading
 
 import speech_recognition as sr
@@ -57,7 +58,9 @@ class VoiceEngine:
                 self._tts_ok = True
             except Exception:
                 self._tts_ok = False
-                print("WARNING: TTS backend not available. Listen button will be silent.")
+                print(
+                    "WARNING: TTS backend not available. Listen button will be silent."
+                )
         return self._tts_ok
 
     # ------------------------------------------------------------------ STT
@@ -68,8 +71,9 @@ class VoiceEngine:
         try:
             with self.mic as source:
                 self.recognizer.adjust_for_ambient_noise(source, duration=0.6)
-                audio = self.recognizer.listen(source, timeout=timeout,
-                                               phrase_time_limit=phrase_limit)
+                audio = self.recognizer.listen(
+                    source, timeout=timeout, phrase_time_limit=phrase_limit
+                )
             return self.transcriber(audio)
         except Exception:
             return None
@@ -105,9 +109,12 @@ class VoiceEngine:
         self._stop_flag = True
         if self.is_speaking and self.tts_engine is not None:
             try:
-                self.tts_engine.stop()   # flushes utterance queue
+                self.tts_engine.stop()  # flushes utterance queue
             except Exception:
                 pass
-            if self._speak_thread and self._speak_thread is not threading.current_thread():
+            if (
+                self._speak_thread
+                and self._speak_thread is not threading.current_thread()
+            ):
                 self._speak_thread.join(timeout=1.5)
         return not self.is_speaking

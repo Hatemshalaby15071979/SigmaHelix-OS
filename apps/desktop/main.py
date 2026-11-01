@@ -7,6 +7,7 @@ SigmaHelix — main desktop app (CustomTkinter, ADHD-friendly).
 - 🔊 TTS is ALWAYS on demand: press Listen to hear a reply, Stop to cut it off.
 - ✅ Tasks · 📝 Notes · 📁 12 projects · 🚀 launchers + released-app explorer
 """
+
 import glob
 import os
 import subprocess
@@ -21,7 +22,9 @@ from theme import ThemeConfig as T
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
-SIGMAHELIX_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+SIGMAHELIX_ROOT = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+)
 CAREER = os.path.dirname(SIGMAHELIX_ROOT)
 REPOS_DIR = os.path.join(CAREER, "cloned_repos")
 
@@ -29,10 +32,12 @@ REPOS_DIR = os.path.join(CAREER, "cloned_repos")
 class SigmaHelixApp:
     def __init__(self):
         self.agent = Agent()
-        self._last_reply = ""          # latest reply text, spoken only via 🔊 Listen
+        self._last_reply = ""  # latest reply text, spoken only via 🔊 Listen
         self.app = ctk.CTk()
-        self.app.title(f"SigmaHelix  ·  local LLM: {self.agent.model} "
-                       f"({'ON' if self.agent.llm_available else 'OFF (keyword mode)'})")
+        self.app.title(
+            f"SigmaHelix  ·  local LLM: {self.agent.model} "
+            f"({'ON' if self.agent.llm_available else 'OFF (keyword mode)'})"
+        )
         self.app.geometry("1240x780")
         self.app.configure(fg_color=T.colors["bg_main"])
 
@@ -46,13 +51,19 @@ class SigmaHelixApp:
 
     # ---------- helpers ----------
     def _header(self, frame, text):
-        ctk.CTkLabel(frame, text=text, font=T.font_head,
-                     text_color=T.colors["accent"]).pack(anchor="w", padx=12, pady=(10, 4))
+        ctk.CTkLabel(
+            frame, text=text, font=T.font_head, text_color=T.colors["accent"]
+        ).pack(anchor="w", padx=12, pady=(10, 4))
 
     def _textbox(self, frame, height):
-        box = ctk.CTkTextbox(frame, height=height, font=("Consolas", 13),
-                             fg_color=T.colors["bg_main"], text_color=T.colors["text_main"],
-                             wrap="word")
+        box = ctk.CTkTextbox(
+            frame,
+            height=height,
+            font=("Consolas", 13),
+            fg_color=T.colors["bg_main"],
+            text_color=T.colors["text_main"],
+            wrap="word",
+        )
         box.pack(fill="both", expand=True, padx=10, pady=(0, 8))
         box.configure(state="disabled")
         return box
@@ -74,30 +85,54 @@ class SigmaHelixApp:
         row = ctk.CTkFrame(frame, fg_color="transparent")
         row.pack(fill="x", padx=10, pady=(0, 12))
 
-        self.entry = ctk.CTkEntry(row, placeholder_text="Type a message… e.g. 'plan my day'",
-                                  font=("Segoe UI", 15), height=42)
+        self.entry = ctk.CTkEntry(
+            row,
+            placeholder_text="Type a message… e.g. 'plan my day'",
+            font=("Segoe UI", 15),
+            height=42,
+        )
         self.entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
         self.entry.bind("<Return>", lambda _e: self._send())
 
-        self.send_btn = ctk.CTkButton(row, text="Send ➤", width=90, height=42,
-                                      font=T.font_btn, command=self._send)
+        self.send_btn = ctk.CTkButton(
+            row, text="Send ➤", width=90, height=42, font=T.font_btn, command=self._send
+        )
         self.send_btn.pack(side="left")
 
-        self.mic_btn = ctk.CTkButton(row, text="🎙️", width=48, height=42,
-                                     font=("Segoe UI", 18), command=self._toggle_mic)
+        self.mic_btn = ctk.CTkButton(
+            row,
+            text="🎙️",
+            width=48,
+            height=42,
+            font=("Segoe UI", 18),
+            command=self._toggle_mic,
+        )
         self.mic_btn.pack(side="left", padx=(6, 0))
 
         speak_row = ctk.CTkFrame(frame, fg_color="transparent")
         speak_row.pack(anchor="w", padx=14, pady=(0, 6))
-        ctk.CTkButton(speak_row, text="🔊 Listen", width=110, height=30,
-                      font=T.font_btn, command=self._listen_to_reply
-                      ).pack(side="left")
-        ctk.CTkButton(speak_row, text="⏹ Stop", width=80, height=30,
-                      font=T.font_btn, fg_color="#8a3324", hover_color="#a8453a",
-                      command=self._stop_speech).pack(side="left", padx=(6, 0))
+        ctk.CTkButton(
+            speak_row,
+            text="🔊 Listen",
+            width=110,
+            height=30,
+            font=T.font_btn,
+            command=self._listen_to_reply,
+        ).pack(side="left")
+        ctk.CTkButton(
+            speak_row,
+            text="⏹ Stop",
+            width=80,
+            height=30,
+            font=T.font_btn,
+            fg_color="#8a3324",
+            hover_color="#a8453a",
+            command=self._stop_speech,
+        ).pack(side="left", padx=(6, 0))
 
-        self.status = ctk.CTkLabel(frame, text="", font=("Segoe UI", 11),
-                                   text_color=T.colors["text_dim"])
+        self.status = ctk.CTkLabel(
+            frame, text="", font=("Segoe UI", 11), text_color=T.colors["text_dim"]
+        )
         self.status.pack(anchor="w", padx=14, pady=(0, 10))
 
     def _send(self):
@@ -105,7 +140,7 @@ class SigmaHelixApp:
         if not text:
             return
         self.entry.delete(0, "end")
-        box = self.chat_box.configure(state="normal")
+        self.chat_box.configure(state="normal")
         self.chat_box.insert("end", f"\n🧑 You: {text}\n")
         self.chat_box.configure(state="disabled")
         self.chat_box.see("end")
@@ -157,7 +192,9 @@ class SigmaHelixApp:
             self.status.configure(text="mic stopped")
         else:
             if not eng.mic_available:
-                self.status.configure(text="Offline speech-to-text is not configured; audio stays local.")
+                self.status.configure(
+                    text="Offline speech-to-text is not configured; audio stays local."
+                )
                 return
             self.mic_btn.configure(text="⏹")
             self.status.configure(text="listening… speak now")
@@ -208,10 +245,14 @@ class SigmaHelixApp:
         for name in sorted(os.listdir(REPOS_DIR)) if os.path.isdir(REPOS_DIR) else []:
             if name.startswith(".pytest") or name.startswith("__pycache__"):
                 continue
-            ctk.CTkButton(self.project_list, text=name, anchor="w", height=30,
-                          font=("Segoe UI", 12),
-                          command=lambda n=name: self._open_folder(os.path.join(REPOS_DIR, n))
-                          ).pack(fill="x", pady=1)
+            ctk.CTkButton(
+                self.project_list,
+                text=name,
+                anchor="w",
+                height=30,
+                font=("Segoe UI", 12),
+                command=lambda n=name: self._open_folder(os.path.join(REPOS_DIR, n)),
+            ).pack(fill="x", pady=1)
 
     def _open_folder(self, path):
         try:
@@ -227,30 +268,56 @@ class SigmaHelixApp:
 
         row = ctk.CTkFrame(frame, fg_color="transparent")
         row.pack(fill="x", padx=10)
-        ctk.CTkButton(row, text="▶ Study Studio", height=40, font=T.font_btn,
-                      command=lambda: self.react(self.agent.launcher.launch_study_studio("x"))
-                      ).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(row, text="▶ L-D Command Center", height=40, font=T.font_btn,
-                      command=lambda: self.react(self.agent.launcher.launch_ld_command_center("x"))
-                      ).pack(side="left", padx=(0, 8))
-        ctk.CTkButton(row, text="🔎 Scan for .exe apps", height=40, font=T.font_btn,
-                      command=self._scan_exes).pack(side="left")
+        ctk.CTkButton(
+            row,
+            text="▶ Study Studio",
+            height=40,
+            font=T.font_btn,
+            command=lambda: self.react(self.agent.launcher.launch_study_studio("x")),
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            row,
+            text="▶ L-D Command Center",
+            height=40,
+            font=T.font_btn,
+            command=lambda: self.react(
+                self.agent.launcher.launch_ld_command_center("x")
+            ),
+        ).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(
+            row,
+            text="🔎 Scan for .exe apps",
+            height=40,
+            font=T.font_btn,
+            command=self._scan_exes,
+        ).pack(side="left")
 
         self.launch_box = self._textbox(frame, 96)
 
     def _scan_exes(self):
         found = []
         if os.path.isdir(REPOS_DIR):
-            for exe in glob.glob(os.path.join(REPOS_DIR, "**", "*.exe"), recursive=True):
+            for exe in glob.glob(
+                os.path.join(REPOS_DIR, "**", "*.exe"), recursive=True
+            ):
                 found.append(os.path.relpath(exe, REPOS_DIR))
-        self._set_box(self.launch_box,
-                      "Released apps found:\n" + ("\n".join(f"• {f}" for f in found)
-                                                  or "• (none yet — package a project with PyInstaller)"))
+        self._set_box(
+            self.launch_box,
+            "Released apps found:\n"
+            + (
+                "\n".join(f"• {f}" for f in found)
+                or "• (none yet — package a project with PyInstaller)"
+            ),
+        )
         # also scan our own build
         local = glob.glob(os.path.join(SIGMAHELIX_ROOT, "apps", "desktop", "dist", "*"))
         if local:
-            self._set_box(self.launch_box, self.launch_box.get("1.0", "end") +
-                          "\nSigmaHelix binaries: " + ", ".join(os.path.basename(p) for p in local))
+            self._set_box(
+                self.launch_box,
+                self.launch_box.get("1.0", "end")
+                + "\nSigmaHelix binaries: "
+                + ", ".join(os.path.basename(p) for p in local),
+            )
 
     def react(self, text):
         self._show_reply(str(text))

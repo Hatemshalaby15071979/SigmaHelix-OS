@@ -3,6 +3,7 @@
 Theme — ADHD-friendly dark high-contrast theme for SigmaHelix.
 Clear sections, large buttons, minimal clutter, visual separation.
 """
+
 import customtkinter as ctk
 
 ctk.set_appearance_mode("dark")
@@ -24,8 +25,10 @@ FONT_MAIN = ("Segoe UI", 14)
 FONT_HEAD = ("Segoe UI", 20, "bold")
 FONT_BTN = ("Segoe UI", 14, "bold")
 
+
 class ThemeConfig:
     """Theme configuration used across the app."""
+
     colors = COLORS
     font_main = FONT_MAIN
     font_head = FONT_HEAD

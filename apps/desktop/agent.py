@@ -11,7 +11,7 @@ Agent — LLM-first personal assistant (Ollama) with deterministic keyword fallb
 - If the server is down, times out, or returns garbage, we fall back to the local
   keyword router so the app is always usable offline.
 """
-import datetime
+
 import json
 import os
 import threading
@@ -19,13 +19,23 @@ import urllib.error
 import urllib.request
 
 from local_endpoints import is_loopback_url
-from tasks import TasksManager, NotesManager, ProjectsManager, CalendarManager, LauncherManager
+from tasks import (
+    TasksManager,
+    NotesManager,
+    ProjectsManager,
+    CalendarManager,
+    LauncherManager,
+)
 from voice import VoiceEngine
 
-_configured_ollama_hosts = (os.environ.get(
-    "OLLAMA_HOSTS", "http://localhost:11435,http://localhost:11434")).split(",")
-OLLAMA_HOSTS = [host.strip().rstrip("/") for host in _configured_ollama_hosts
-                if is_loopback_url(host)]
+_configured_ollama_hosts = (
+    os.environ.get("OLLAMA_HOSTS", "http://localhost:11435,http://localhost:11434")
+).split(",")
+OLLAMA_HOSTS = [
+    host.strip().rstrip("/")
+    for host in _configured_ollama_hosts
+    if is_loopback_url(host)
+]
 DEFAULT_LOCAL_OLLAMA_HOST = "http://127.0.0.1:11435"
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2:1b")
 
@@ -59,7 +69,7 @@ class Agent:
         self.launcher = LauncherManager()
         self.voice = None
         self.host = OLLAMA_HOSTS[0] if OLLAMA_HOSTS else DEFAULT_LOCAL_OLLAMA_HOST
-        self.history = []          # (role, content) chat history, last 8 turns
+        self.history = []  # (role, content) chat history, last 8 turns
         self._llm_lock = threading.Lock()
         self.llm_available = self._check_llm(timeout=1.5)
 
@@ -108,8 +118,17 @@ class Agent:
                     models = [m["name"] for m in json.loads(r.read()).get("models", [])]
             except Exception:
                 continue
-            pref = [OLLAMA_MODEL, "llama3.2:1b", "llama3.2:3b", "llama3.2",
-                    "llama3.1:8b", "mistral:7b", "qwen3.5:9b", "llama3", "phi3"]
+            pref = [
+                OLLAMA_MODEL,
+                "llama3.2:1b",
+                "llama3.2:3b",
+                "llama3.2",
+                "llama3.1:8b",
+                "mistral:7b",
+                "qwen3.5:9b",
+                "llama3",
+                "phi3",
+            ]
             for want in pref:
                 for m in models:
                     if m == want or m.split(":")[0] == want.split(":")[0]:
@@ -128,12 +147,19 @@ class Agent:
         return self.llm_available
 
     def _ollama_chat(self, messages, timeout=25):
-        payload = {"model": self.model, "messages": messages, "stream": False,
-                   "options": {"temperature": 0.2}}
+        payload = {
+            "model": self.model,
+            "messages": messages,
+            "stream": False,
+            "options": {"temperature": 0.2},
+        }
         data = json.dumps(payload).encode()
         req = urllib.request.Request(
-            f"{self.host}/api/chat", data=data,
-            headers={"Content-Type": "application/json"}, method="POST")
+            f"{self.host}/api/chat",
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             out = json.loads(resp.read())
         return out.get("message", {}).get("content", "").strip()
@@ -187,7 +213,7 @@ class Agent:
         if start == -1 or end == -1:
             return None
         try:
-            return json.loads(content[start:end + 1])
+            return json.loads(content[start : end + 1])
         except json.JSONDecodeError:
             return None
 
@@ -250,7 +276,13 @@ class Agent:
         if "stop listening" in text:
             self.voice_engine.stop_listening()
             return "Voice listening stopped."
-        if "stop speech" in text or text in ("stop", "shut up", "be quiet", "stop talking", "mute"):
+        if "stop speech" in text or text in (
+            "stop",
+            "shut up",
+            "be quiet",
+            "stop talking",
+            "mute",
+        ):
             self.stop_speech()
             return "🔇 Speech stopped."
         if text.startswith("listen "):
@@ -273,13 +305,17 @@ class Agent:
             return d
 
         # tasks
-        if ("create" in text or "add" in text or "new" in text) and \
-           (any(w in text for w in ("task", "todo", "to-do"))):
+        if ("create" in text or "add" in text or "new" in text) and (
+            any(w in text for w in ("task", "todo", "to-do"))
+        ):
             return self.tasks.create_task(text)
-        if ("list" in text or "show" in text or "view" in text) and \
-           (any(w in text for w in ("task", "todo", "to-do"))):
+        if ("list" in text or "show" in text or "view" in text) and (
+            any(w in text for w in ("task", "todo", "to-do"))
+        ):
             return self.tasks.list_tasks(text)
-        if ("complete" in text or "done" in text or "finished" in text) and "task" in text:
+        if (
+            "complete" in text or "done" in text or "finished" in text
+        ) and "task" in text:
             return self.tasks.complete_task(text)
         if ("delete" in text or "remove" in text) and "task" in text:
             return self.tasks.delete_task(text)
@@ -289,11 +325,13 @@ class Agent:
             return self.calendar.get_tasks_for_date(text)
 
         # notes
-        if ("note" in text or "memo" in text or "remember" in text) and \
-           any(w in text for w in ("create", "write", "new", "remember")):
+        if ("note" in text or "memo" in text or "remember" in text) and any(
+            w in text for w in ("create", "write", "new", "remember")
+        ):
             return self.notes.create_note(text)
-        if ("note" in text or "memo" in text) and \
-           any(w in text for w in ("view", "show", "list")):
+        if ("note" in text or "memo" in text) and any(
+            w in text for w in ("view", "show", "list")
+        ):
             return self.notes.list_notes(text)
         if "delete" in text and "note" in text:
             return self.notes.delete_note(text)
@@ -314,14 +352,20 @@ class Agent:
             return "Hello! 👋 I'm your SigmaHelix assistant. Talk to me naturally, or type 'help'."
         if "help" in text or "commands" in text:
             return self._default_help()
-        return ("I didn't catch a clear action." + ("" if not self.llm_available else "") +
-                "\nTry: 'help', 'create task report', 'show projects', 'explorer'.")
+        return (
+            "I didn't catch a clear action."
+            + ("" if not self.llm_available else "")
+            + "\nTry: 'help', 'create task report', 'show projects', 'explorer'."
+        )
 
     def _default_help(self):
-        status = ("ONLINE — GPU Ollama at {} (first reachable), model {}".format(
-            OLLAMA_HOSTS[0], self.model)
-            if self.llm_available else
-            "OFFLINE (start: bash start_gpu_ollama.sh; then: ~/.local/bin/ollama pull llama3.2:1b)")
+        status = (
+            "ONLINE — GPU Ollama at {} (first reachable), model {}".format(
+                OLLAMA_HOSTS[0], self.model
+            )
+            if self.llm_available
+            else "OFFLINE (start: bash start_gpu_ollama.sh; then: ~/.local/bin/ollama pull llama3.2:1b)"
+        )
         return f"""📊 LLM status: {status}
 
 Natural language (needs LLM):   e.g. "schedule meeting tomorrow", "what should I work on?"
