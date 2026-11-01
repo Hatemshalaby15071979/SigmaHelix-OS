@@ -1,0 +1,29 @@
+# ci.yml — L&D Studio verification.
+# Runs the zero-dependency test suites: python unittest backend suite + node pure-logic
+# frontend suite. No network services, no secrets, no model downloads — CI only proves
+# the code itself; live Ollama/Piper checks remain local (see docs/verification.md).
+name: ld-studio-verify
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    name: python + node suites
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Run full verification suite (python unittest + node JS tests)
+        run: python3 ld-studio/tests/run_all.py
