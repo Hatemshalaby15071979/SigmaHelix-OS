@@ -9,7 +9,14 @@ build, cache, virtual-environment, and dependency directories are skipped.
 `record()` is an explicit second step. It upserts the project record, appends a
 tenant-scoped immutable `project_scan_snapshots` row, updates
 `projects.last_scanned_at`, and writes a `project.scanned` event and audit
-record in one transaction. Detection is heuristic: this version recognizes
+record in one transaction. Each snapshot gets a deterministic 0–100 score:
+missing README (−10), no recognized manifest (−15), no entrypoint (−15), not a
+Git repo (−20), unavailable Git status (−50), missing Git HEAD (−10), dirty
+working tree (−5), and unsupported artifacts (−10 each up to 30 points). A
+`project_scan_batches` row groups one scan invocation. Call
+`new_since_last_scan(batch)` before `record(batch)` to list roots absent from the
+previous persisted batch; the first batch reports all scanned projects as new.
+Detection is heuristic: this version recognizes
 common manifest and entrypoint names at up to three directory levels and does
 not parse arbitrary build systems. An unrecognized layout is reported as
 `needs_attention` for later review rather than called healthy.

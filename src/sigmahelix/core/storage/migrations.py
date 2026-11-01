@@ -564,6 +564,60 @@ ALTER TABLE project_scan_snapshots DROP COLUMN artifacts_json;
 """,
         rollback_requires_empty=("project_scan_snapshots",),
     ),
+    Migration(
+        version=13,
+        name="project_health_scores_and_scan_batches_v13",
+        up_sql="""
+CREATE TABLE project_scan_batches (
+    id TEXT NOT NULL PRIMARY KEY,
+    tenant_id TEXT NOT NULL CHECK(length(trim(tenant_id)) > 0),
+    scanned_at TEXT NOT NULL,
+    project_count INTEGER NOT NULL CHECK(project_count >= 0),
+    UNIQUE (tenant_id, id)
+);
+CREATE INDEX idx_project_scan_batches_latest
+    ON project_scan_batches(tenant_id, scanned_at DESC);
+DROP TRIGGER IF EXISTS project_scan_snapshots_no_update;
+ALTER TABLE project_scan_snapshots ADD COLUMN batch_id TEXT;
+ALTER TABLE project_scan_snapshots ADD COLUMN health_score INTEGER NOT NULL DEFAULT 0 CHECK(health_score BETWEEN 0 AND 100);
+UPDATE project_scan_snapshots SET health_score = CASE health
+    WHEN 'ok' THEN 100 WHEN 'needs_attention' THEN 50 ELSE 0 END;
+INSERT INTO project_scan_batches (id, tenant_id, scanned_at, project_count)
+    SELECT MIN(id), tenant_id, scanned_at, COUNT(*)
+    FROM project_scan_snapshots GROUP BY tenant_id, scanned_at;
+UPDATE project_scan_snapshots
+SET batch_id = (
+    SELECT b.id FROM project_scan_batches b
+    WHERE b.tenant_id = project_scan_snapshots.tenant_id
+      AND b.scanned_at = project_scan_snapshots.scanned_at
+);
+CREATE TRIGGER project_scan_snapshots_no_update
+BEFORE UPDATE ON project_scan_snapshots BEGIN
+    SELECT RAISE(ABORT, 'project scan snapshots are append-only');
+END;
+CREATE TRIGGER project_scan_batches_no_update
+BEFORE UPDATE ON project_scan_batches BEGIN
+    SELECT RAISE(ABORT, 'project scan batches are append-only');
+END;
+CREATE TRIGGER project_scan_batches_no_delete
+BEFORE DELETE ON project_scan_batches BEGIN
+    SELECT RAISE(ABORT, 'project scan batches are append-only');
+END;
+""",
+        down_sql="""
+DROP TRIGGER IF EXISTS project_scan_batches_no_delete;
+DROP TRIGGER IF EXISTS project_scan_batches_no_update;
+DROP TRIGGER IF EXISTS project_scan_snapshots_no_update;
+ALTER TABLE project_scan_snapshots DROP COLUMN health_score;
+ALTER TABLE project_scan_snapshots DROP COLUMN batch_id;
+DROP TABLE IF EXISTS project_scan_batches;
+CREATE TRIGGER project_scan_snapshots_no_update
+BEFORE UPDATE ON project_scan_snapshots BEGIN
+    SELECT RAISE(ABORT, 'project scan snapshots are append-only');
+END;
+""",
+        rollback_requires_empty=("project_scan_batches", "project_scan_snapshots"),
+    ),
 )
 
 

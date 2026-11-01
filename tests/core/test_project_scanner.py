@@ -87,6 +87,7 @@ def test_scan_is_read_only_until_persisted_then_latest_snapshot_is_tenant_scoped
     recorded = scanner.record(batch, tenant_id="tenant-a")[0]
     latest = scanner.latest(recorded.id, tenant_id="tenant-a")
     assert latest == recorded
+    assert latest.health_score == 100
     assert scanner.latest(recorded.id, tenant_id="tenant-b") is None
     with database.connection() as connection:
         assert (
@@ -142,3 +143,31 @@ def test_windows_artifacts_are_explicitly_unsupported_on_linux_and_persisted(tmp
         assert "unsupported on Linux" in artifact.reason
     saved = scanner.record(ProjectScanBatch((scan,), 0.0))[0]
     assert scanner.latest(saved.id).artifacts == scan.artifacts
+
+
+def test_health_scores_are_deterministic_and_new_projects_compare_scan_batches(
+    tmp_path,
+):
+    healthy = tmp_path / "healthy"
+    _make_repo(healthy, 5)
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    added = tmp_path / "added"
+    _make_repo(added, 6)
+    database = Database((tmp_path / "score.db").resolve())
+    database.initialize()
+    scanner = ProjectScanner(database, clock=lambda: NOW)
+
+    first = scanner.scan([healthy, empty])
+    assert {scan.name: scan.health_score for scan in first.scans} == {
+        "healthy": 100,
+        "empty": 40,
+    }
+    assert scanner.new_since_last_scan(first) == first.scans
+    scanner.record(first)
+
+    second = scanner.scan([healthy, empty, added])
+    assert [scan.name for scan in scanner.new_since_last_scan(second)] == ["added"]
+    scanner.record(second)
+    third = scanner.scan([healthy, empty, added])
+    assert scanner.new_since_last_scan(third) == ()

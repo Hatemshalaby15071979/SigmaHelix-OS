@@ -30,12 +30,12 @@ def _application_objects(database: Database) -> set[tuple[str, str]]:
     return {(row["type"], row["name"]) for row in rows}
 
 
-def test_migration_runner_applies_v0_to_v12_and_rolls_back_empty_database(tmp_path):
+def test_migration_runner_applies_v0_to_v13_and_rolls_back_empty_database(tmp_path):
     database = Database(tmp_path / "migrations.db")
     runner = MigrationRunner(database)
 
     assert runner.current_version() == 0
-    assert runner.upgrade() == 12
+    assert runner.upgrade() == 13
     assert ("table", "tasks") in _application_objects(database)
     assert ("table", "audit_log") in _application_objects(database)
     assert ("table", "event_stream") in _application_objects(database)
@@ -51,6 +51,7 @@ def test_migration_runner_applies_v0_to_v12_and_rolls_back_empty_database(tmp_pa
     assert ("table", "project_scan_snapshots") in _application_objects(database)
     assert ("table", "launcher_profiles") in _application_objects(database)
     assert ("table", "launcher_runs") in _application_objects(database)
+    assert ("table", "project_scan_batches") in _application_objects(database)
     with database.connection() as connection:
         columns = {
             row["name"]
@@ -61,8 +62,8 @@ def test_migration_runner_applies_v0_to_v12_and_rolls_back_empty_database(tmp_pa
 
     assert runner.downgrade(0) == 0
     assert _application_objects(database) == set()
-    assert runner.upgrade() == 12
-    assert _version(database) == 12
+    assert runner.upgrade() == 13
+    assert _version(database) == 13
 
 
 def test_migration_runner_refuses_downgrade_when_it_would_drop_records(tmp_path):
@@ -105,7 +106,7 @@ def test_migration_runner_rejects_untracked_and_newer_schemas(tmp_path):
 
     newer = Database(tmp_path / "newer.db")
     with newer.connection() as connection:
-        connection.execute("PRAGMA user_version = 13")
+        connection.execute("PRAGMA user_version = 14")
     with pytest.raises(MigrationError, match="newer than supported"):
         MigrationRunner(newer).upgrade()
 
@@ -134,10 +135,11 @@ def test_upgrade_and_downgrade_targets_cannot_move_in_the_wrong_direction(tmp_pa
             Migration(12, "v12", "", ""),
             Migration(13, "v13", "", ""),
             Migration(14, "v14", "", ""),
+            Migration(15, "v15", "", ""),
         ),
     )
     with pytest.raises(MigrationError, match="above the current version"):
-        extended_runner.downgrade(target_version=13)
+        extended_runner.downgrade(target_version=14)
 
 
 def test_migration_versions_must_be_contiguous(tmp_path):
@@ -173,10 +175,50 @@ def test_alarm_migration_backfills_existing_notifications(tmp_path):
             (NOW.isoformat(),),
         )
 
-    assert runner.upgrade() == 12
+    assert runner.upgrade() == 13
     with database.connection() as connection:
         row = connection.execute(
             "SELECT state FROM notification_alarm_states WHERE notification_id = ?",
             ("notification-1",),
         ).fetchone()
     assert row["state"] == "pending"
+
+
+def test_health_migration_backfills_old_snapshots_and_batch_membership(tmp_path):
+    database = Database(tmp_path / "scan-backfill.db")
+    runner = MigrationRunner(database)
+    runner.upgrade(target_version=12)
+    project_id = "project-existing"
+    snapshot_id = "snapshot-existing"
+    with database.transaction() as connection:
+        connection.execute(
+            "INSERT INTO projects "
+            "(id, tenant_id, name, root_path, created_at, updated_at, last_scanned_at, deleted_at) "
+            "VALUES (?, 'local', 'Existing', ?, ?, ?, ?, NULL)",
+            (
+                project_id,
+                str((tmp_path / "existing").resolve()),
+                NOW.isoformat(),
+                NOW.isoformat(),
+                NOW.isoformat(),
+            ),
+        )
+        connection.execute(
+            "INSERT INTO project_scan_snapshots "
+            "(id, tenant_id, project_id, scanned_at, git_branch, git_commit, git_dirty, git_change_count, manifests_json, entrypoints_json, findings_json, health, artifacts_json) "
+            "VALUES (?, 'local', ?, ?, NULL, NULL, NULL, 0, '[]', '[]', '[\"missing_readme\"]', 'needs_attention', '[]')",
+            (snapshot_id, project_id, NOW.isoformat()),
+        )
+
+    assert runner.upgrade() == 13
+    with database.connection() as connection:
+        snapshot = connection.execute(
+            "SELECT batch_id, health_score FROM project_scan_snapshots WHERE id = ?",
+            (snapshot_id,),
+        ).fetchone()
+        batch_count = connection.execute(
+            "SELECT COUNT(*) FROM project_scan_batches"
+        ).fetchone()[0]
+    assert snapshot["batch_id"]
+    assert snapshot["health_score"] == 50
+    assert batch_count == 1

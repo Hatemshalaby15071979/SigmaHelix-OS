@@ -9,7 +9,7 @@ import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Callable, Iterable
@@ -88,6 +88,7 @@ class ProjectScan:
     findings: tuple[str, ...]
     health: str
     artifacts: tuple["ProjectArtifact", ...] = ()
+    health_score: int = 100
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,6 +107,7 @@ class ProjectScanBatch:
 
     scans: tuple[ProjectScan, ...]
     duration_seconds: float
+    id: UUID = field(default_factory=uuid4)
 
 
 def _utc(clock: Callable[[], datetime]) -> datetime:
@@ -217,6 +219,7 @@ def _scan_one(path: Path, tenant_id: str, scanned_at: datetime) -> ProjectScan:
         if git_finding in {"git_unavailable", "git_status_timeout"}
         else ("needs_attention" if findings else "ok")
     )
+    score = _health_score(findings, dirty, artifacts)
     project_id = uuid5(NAMESPACE_URL, f"sigmahelix:project:{tenant_id}:{resolved}")
     return ProjectScan(
         project_id,
@@ -232,6 +235,7 @@ def _scan_one(path: Path, tenant_id: str, scanned_at: datetime) -> ProjectScan:
         tuple(findings),
         health,
         artifacts,
+        score,
     )
 
 
@@ -263,6 +267,26 @@ def _artifact_label(path: str) -> ProjectArtifact:
         "unsupported",
         f"{platform.title()} artifact is unsupported on {host}",
     )
+
+
+def _health_score(
+    findings: Iterable[str], dirty: bool | None, artifacts: tuple[ProjectArtifact, ...]
+) -> int:
+    penalties = {
+        "missing_readme": 10,
+        "no_recognized_manifest": 15,
+        "no_detected_entrypoint": 15,
+        "not_git_repository": 20,
+        "git_head_unavailable": 10,
+        "git_status_timeout": 50,
+        "git_unavailable": 50,
+    }
+    score = 100 - sum(penalties.get(item, 0) for item in set(findings))
+    if dirty:
+        score -= 5
+    unsupported_count = sum(item.status == "unsupported" for item in artifacts)
+    score -= min(30, unsupported_count * 10)
+    return max(0, min(100, score))
 
 
 class ProjectScanner:
@@ -306,6 +330,35 @@ class ProjectScanner:
         results.sort(key=lambda item: str(item.root_path).casefold())
         return ProjectScanBatch(tuple(results), time.perf_counter() - started)
 
+    def new_since_last_scan(
+        self, batch: ProjectScanBatch, tenant_id: str = "local"
+    ) -> tuple[ProjectScan, ...]:
+        """Return paths absent from the latest persisted scan batch.
+
+        Call this before `record(batch)`. Every project in the first batch is
+        new because there is no previous inventory to compare with.
+        """
+        if not isinstance(batch, ProjectScanBatch):
+            raise ValueError("batch must be a ProjectScanBatch")
+        if not isinstance(tenant_id, str) or not tenant_id.strip():
+            raise ValueError("tenant_id must be a non-empty string")
+        with self.database.connection() as connection:
+            previous = connection.execute(
+                "SELECT id FROM project_scan_batches WHERE tenant_id = ? "
+                "ORDER BY scanned_at DESC, rowid DESC LIMIT 1",
+                (tenant_id,),
+            ).fetchone()
+            if previous is None:
+                return batch.scans
+            rows = connection.execute(
+                "SELECT p.root_path FROM project_scan_snapshots s "
+                "JOIN projects p ON p.id = s.project_id AND p.tenant_id = s.tenant_id "
+                "WHERE s.tenant_id = ? AND s.batch_id = ?",
+                (tenant_id, previous["id"]),
+            ).fetchall()
+        prior_paths = {Path(row["root_path"]) for row in rows}
+        return tuple(scan for scan in batch.scans if scan.root_path not in prior_paths)
+
     def record(
         self, batch: ProjectScanBatch, tenant_id: str = "local"
     ) -> tuple[ProjectScan, ...]:
@@ -317,6 +370,18 @@ class ProjectScanner:
         recorded: list[ProjectScan] = []
         now = _utc(self._clock)
         with self.database.transaction() as connection:
+            connection.execute(
+                "INSERT INTO project_scan_batches (id, tenant_id, scanned_at, project_count) "
+                "VALUES (?, ?, ?, ?)",
+                (
+                    str(batch.id),
+                    tenant_id,
+                    batch.scans[0].scanned_at.isoformat()
+                    if batch.scans
+                    else now.isoformat(),
+                    len(batch.scans),
+                ),
+            )
             for scan in batch.scans:
                 project = Project(
                     scan.name,
@@ -351,8 +416,8 @@ class ProjectScanner:
                 snapshot_id = uuid4()
                 connection.execute(
                     "INSERT INTO project_scan_snapshots "
-                    "(id, tenant_id, project_id, scanned_at, git_branch, git_commit, git_dirty, git_change_count, manifests_json, entrypoints_json, findings_json, health, artifacts_json) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "(id, tenant_id, project_id, scanned_at, git_branch, git_commit, git_dirty, git_change_count, manifests_json, entrypoints_json, findings_json, health, artifacts_json, batch_id, health_score) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         str(snapshot_id),
                         tenant_id,
@@ -379,6 +444,8 @@ class ProjectScanner:
                             sort_keys=True,
                             separators=(",", ":"),
                         ),
+                        str(batch.id),
+                        scan.health_score,
                     ),
                 )
                 event_type = "project.scanned"
@@ -387,6 +454,7 @@ class ProjectScanner:
                     "snapshot_id": str(snapshot_id),
                     "git_dirty": scan.git_dirty,
                     "health": scan.health,
+                    "health_score": scan.health_score,
                 }
                 connection.execute(
                     "INSERT INTO events (id, tenant_id, event_type, payload_json, occurred_at) "
@@ -423,6 +491,7 @@ class ProjectScanner:
                         scan.findings,
                         scan.health,
                         scan.artifacts,
+                        scan.health_score,
                     )
                 )
         return tuple(recorded)
@@ -457,4 +526,5 @@ class ProjectScanner:
             tuple(
                 ProjectArtifact(**item) for item in json.loads(row["artifacts_json"])
             ),
+            row["health_score"],
         )

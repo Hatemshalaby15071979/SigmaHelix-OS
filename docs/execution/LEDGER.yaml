@@ -229,7 +229,7 @@ gates:
         evidence: docs/execution/evidence/P2-010.md
       - id: P2-011
         title: Project health score and new-since-last-scan view
-        status: in_progress
+        status: done
         depends_on: [P2-007]
         acceptance:
           - "Deterministic score tests"
