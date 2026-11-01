@@ -106,14 +106,14 @@ gates:
         evidence: docs/execution/evidence/P1-003.md
       - id: P1-004
         title: Config layer with YAML, environment, and keyring
-        status: in_progress
+        status: done
         depends_on: [P1-001]
         acceptance:
           - "No hardcoded paths; precedence tests"
         evidence: docs/execution/evidence/P1-004.md
       - id: P1-005
         title: Structured logging and redaction
-        status: blocked
+        status: ready
         depends_on: [P1-004]
         acceptance:
           - "Secret-pattern test yields zero leaks"

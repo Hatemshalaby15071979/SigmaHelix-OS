@@ -1,5 +1,6 @@
-"""Validated domain types for SigmaHelix's durable core."""
+"""Validated domain types and settings for SigmaHelix's durable core."""
 
+from .config import ConfigError, Settings, load_settings
 from .models import (
     Approval,
     ApprovalStatus,
@@ -12,16 +13,22 @@ from .models import (
     Task,
     TaskStatus,
 )
+from .secrets import KeyringSecretStore, SecretStoreError
 
 __all__ = [
     "Approval",
     "ApprovalStatus",
+    "ConfigError",
     "DomainValidationError",
     "Evidence",
     "Event",
+    "KeyringSecretStore",
     "Note",
     "Project",
     "RiskLevel",
+    "SecretStoreError",
+    "Settings",
     "Task",
     "TaskStatus",
+    "load_settings",
 ]

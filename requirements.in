@@ -3,6 +3,7 @@ customtkinter==6.0.0
 PyYAML==6.0.3
 SpeechRecognition==3.17.0
 pyttsx3==2.99
+keyring==25.7.0
 pytest==9.2.0
 mypy==2.4.1
 ruff==0.17.3

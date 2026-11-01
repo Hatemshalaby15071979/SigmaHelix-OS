@@ -12,3 +12,7 @@
 - Completed P1-003: installed a transactional v0→v1 migration runner, idempotent initialization, schema-state checks, and an empty-database-only rollback guard. Failed DDL leaves no partial objects or version change. Full local CI passed (31 core/ledger tests; 27 offline app tests).
 - The bundled migration generator was run but produced invalid SQLite syntax and `information_schema` validation SQL; no generated output was adopted. See P1-003 evidence and ADR 0002.
 - P1-004 (YAML, environment, and keyring configuration) is now in progress.
+
+- Completed P1-004: added XDG-derived defaults, YAML and environment precedence, secret-setting rejection, a fail-closed OS-keyring facade, and a hash-pinned `keyring` dependency. Clean-environment CI passed (39 core/ledger tests; 27 offline desktop tests). No real system keyring or credentials were accessed.
+- Durability decision: kept SQLite `synchronous=FULL` to meet the committed-data power-loss requirement; see ADR 0003.
+- P1-005 (structured logging and redaction) is now the next eligible task.
