@@ -2,6 +2,7 @@
 
 from .audit import AuditLog, AuditLogEntry, AuditLogError, AuditVerification
 from .database import Database
+from .event_bus import EventBus, EventBusError, EventDispatchError, EventEnvelope
 from .migrations import (
     Migration,
     MigrationDataLossError,
@@ -25,6 +26,10 @@ __all__ = [
     "AuditLogError",
     "AuditVerification",
     "Database",
+    "EventBus",
+    "EventBusError",
+    "EventDispatchError",
+    "EventEnvelope",
     "EvidenceRepository",
     "Migration",
     "MigrationDataLossError",

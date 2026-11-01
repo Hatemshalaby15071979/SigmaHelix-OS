@@ -127,14 +127,14 @@ gates:
         evidence: docs/execution/evidence/P1-006.md
       - id: P1-007
         title: Event bus with persistence
-        status: in_progress
+        status: done
         depends_on: [P1-002, P1-006]
         acceptance:
           - "Publish/subscribe; replay test"
         evidence: docs/execution/evidence/P1-007.md
       - id: P1-008
         title: Backup, export, and restore commands
-        status: ready
+        status: in_progress
         depends_on: [P1-002, P1-003]
         acceptance:
           - "Round-trip byte-identical"

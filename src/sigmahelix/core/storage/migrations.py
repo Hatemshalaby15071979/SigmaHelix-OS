@@ -94,6 +94,39 @@ DROP TABLE IF EXISTS audit_log;
 """,
         rollback_requires_empty=("audit_log",),
     ),
+    Migration(
+        version=3,
+        name="persistent_event_stream_v3",
+        up_sql="""
+CREATE TABLE event_stream (
+    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id TEXT NOT NULL UNIQUE,
+    tenant_id TEXT NOT NULL CHECK(length(trim(tenant_id)) > 0),
+    FOREIGN KEY (tenant_id, event_id) REFERENCES events(tenant_id, id) ON DELETE RESTRICT
+);
+CREATE INDEX idx_event_stream_tenant_sequence ON event_stream(tenant_id, sequence);
+INSERT INTO event_stream (event_id, tenant_id)
+    SELECT id, tenant_id FROM events ORDER BY occurred_at, id;
+CREATE TRIGGER events_add_to_stream
+AFTER INSERT ON events BEGIN
+    INSERT INTO event_stream (event_id, tenant_id) VALUES (NEW.id, NEW.tenant_id);
+END;
+CREATE TRIGGER event_stream_no_update
+BEFORE UPDATE ON event_stream BEGIN
+    SELECT RAISE(ABORT, 'event stream is append-only');
+END;
+CREATE TRIGGER event_stream_no_delete
+BEFORE DELETE ON event_stream BEGIN
+    SELECT RAISE(ABORT, 'event stream is append-only');
+END;
+""",
+        down_sql="""
+DROP TRIGGER IF EXISTS events_add_to_stream;
+DROP TRIGGER IF EXISTS event_stream_no_delete;
+DROP TRIGGER IF EXISTS event_stream_no_update;
+DROP TABLE IF EXISTS event_stream;
+""",
+    ),
 )
 
 

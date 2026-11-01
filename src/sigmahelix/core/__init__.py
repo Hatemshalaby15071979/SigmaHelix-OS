@@ -15,7 +15,16 @@ from .models import (
     TaskStatus,
 )
 from .secrets import KeyringSecretStore, SecretStoreError
-from .storage.audit import AuditLog, AuditLogEntry, AuditLogError, AuditVerification
+from .storage import (
+    AuditLog,
+    AuditLogEntry,
+    AuditLogError,
+    AuditVerification,
+    EventBus,
+    EventBusError,
+    EventDispatchError,
+    EventEnvelope,
+)
 
 __all__ = [
     "Approval",
@@ -27,6 +36,10 @@ __all__ = [
     "ConfigError",
     "DomainValidationError",
     "Event",
+    "EventBus",
+    "EventBusError",
+    "EventDispatchError",
+    "EventEnvelope",
     "Evidence",
     "KeyringSecretStore",
     "Note",
