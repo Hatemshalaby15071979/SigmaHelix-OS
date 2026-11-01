@@ -92,14 +92,14 @@ gates:
         evidence: docs/execution/evidence/P1-001.md
       - id: P1-002
         title: SQLite connection, WAL pragmas, and repositories
-        status: ready
+        status: done
         depends_on: [P1-001]
         acceptance:
           - "CRUD round-trip; concurrent read test"
         evidence: docs/execution/evidence/P1-002.md
       - id: P1-003
         title: Migration runner v0 to v1 with rollback
-        status: blocked
+        status: in_progress
         depends_on: [P1-002]
         acceptance:
           - "Forward + rollback tests"
@@ -120,7 +120,7 @@ gates:
         evidence: docs/execution/evidence/P1-005.md
       - id: P1-006
         title: Hash-chained audit log
-        status: blocked
+        status: ready
         depends_on: [P1-002]
         acceptance:
           - "1,000-event chain verifies; tamper detected"
@@ -141,14 +141,14 @@ gates:
         evidence: docs/execution/evidence/P1-008.md
       - id: P1-009
         title: Crash-safety test during write
-        status: blocked
+        status: ready
         depends_on: [P1-002]
         acceptance:
           - "WAL recovery; no corruption"
         evidence: docs/execution/evidence/P1-009.md
       - id: P1-010
         title: Import legacy in-memory session when available
-        status: blocked
+        status: ready
         depends_on: [P1-001, P1-002]
         acceptance:
           - "Idempotent importer test"
