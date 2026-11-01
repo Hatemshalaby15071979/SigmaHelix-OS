@@ -552,6 +552,18 @@ DROP TABLE IF EXISTS launcher_profiles;
 """,
         rollback_requires_empty=("launcher_runs", "launcher_profiles"),
     ),
+    Migration(
+        version=12,
+        name="project_artifact_platform_labels_v12",
+        up_sql="""
+ALTER TABLE project_scan_snapshots
+    ADD COLUMN artifacts_json TEXT NOT NULL DEFAULT '[]' CHECK(json_valid(artifacts_json));
+""",
+        down_sql="""
+ALTER TABLE project_scan_snapshots DROP COLUMN artifacts_json;
+""",
+        rollback_requires_empty=("project_scan_snapshots",),
+    ),
 )
 
 

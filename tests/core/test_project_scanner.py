@@ -1,7 +1,13 @@
 import subprocess
+import sys
 from datetime import UTC, datetime
 
-from sigmahelix.core.storage import AuditLog, Database, ProjectScanner
+from sigmahelix.core.storage import (
+    AuditLog,
+    Database,
+    ProjectScanBatch,
+    ProjectScanner,
+)
 
 
 NOW = datetime(2026, 11, 2, 12, 0, tzinfo=UTC)
@@ -118,3 +124,21 @@ def test_dirty_state_and_health_findings_are_deterministic(tmp_path):
         "no_recognized_manifest",
         "no_detected_entrypoint",
     } <= set(empty_scan.findings)
+
+
+def test_windows_artifacts_are_explicitly_unsupported_on_linux_and_persisted(tmp_path):
+    root = tmp_path / "windows-output"
+    root.mkdir()
+    (root / "setup.exe").write_bytes(b"test artifact")
+    database = Database((tmp_path / "artifacts.db").resolve())
+    database.initialize()
+    scanner = ProjectScanner(database, clock=lambda: NOW)
+
+    scan = scanner.scan([root]).scans[0]
+    artifact = scan.artifacts[0]
+    if sys.platform.startswith("linux"):
+        assert artifact.platform == "windows"
+        assert artifact.status == "unsupported"
+        assert "unsupported on Linux" in artifact.reason
+    saved = scanner.record(ProjectScanBatch((scan,), 0.0))[0]
+    assert scanner.latest(saved.id).artifacts == scan.artifacts

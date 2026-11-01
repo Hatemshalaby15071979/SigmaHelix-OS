@@ -27,6 +27,7 @@ from .migrations import (
 )
 from .notifications import Notification, NotificationError, NotificationService
 from .project_scanner import (
+    ProjectArtifact,
     ProjectScan,
     ProjectScanBatch,
     ProjectScanError,
@@ -88,6 +89,7 @@ __all__ = [
     "OccurrenceError",
     "OccurrenceService",
     "ProjectRepository",
+    "ProjectArtifact",
     "ProjectScan",
     "ProjectScanBatch",
     "ProjectScanError",

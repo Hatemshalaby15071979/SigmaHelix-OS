@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
+import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -85,6 +87,17 @@ class ProjectScan:
     entrypoints: tuple[str, ...]
     findings: tuple[str, ...]
     health: str
+    artifacts: tuple["ProjectArtifact", ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectArtifact:
+    """A build artifact with an explicit target platform and support label."""
+
+    path: str
+    platform: str
+    status: str
+    reason: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,6 +165,7 @@ def _scan_one(path: Path, tenant_id: str, scanned_at: datetime) -> ProjectScan:
     name = resolved.name or str(resolved)
     manifests: set[str] = set()
     entrypoints: set[str] = set()
+    artifact_paths: set[str] = set()
     for current, directory_names, file_names in os.walk(resolved):
         current_path = Path(current)
         depth = len(current_path.relative_to(resolved).parts)
@@ -169,7 +183,23 @@ def _scan_one(path: Path, tenant_id: str, scanned_at: datetime) -> ProjectScan:
                 manifests.add(relative_file)
             if file_name in _ENTRYPOINTS:
                 entrypoints.add(relative_file)
+            if Path(file_name).suffix.lower() in {
+                ".exe",
+                ".msi",
+                ".bat",
+                ".cmd",
+                ".ps1",
+                ".dll",
+                ".appimage",
+                ".deb",
+                ".rpm",
+                ".flatpak",
+                ".desktop",
+                ".jar",
+            }:
+                artifact_paths.add(relative_file)
     entrypoints_tuple = tuple(sorted(entrypoints)[:30])
+    artifacts = tuple(_artifact_label(path) for path in sorted(artifact_paths))
     branch, commit, dirty, change_count, git_finding = _git_state(resolved)
     findings: list[str] = []
     if not any(
@@ -201,6 +231,37 @@ def _scan_one(path: Path, tenant_id: str, scanned_at: datetime) -> ProjectScan:
         entrypoints_tuple,
         tuple(findings),
         health,
+        artifacts,
+    )
+
+
+def _artifact_label(path: str) -> ProjectArtifact:
+    suffix = Path(path).suffix.lower()
+    if suffix in {".exe", ".msi", ".bat", ".cmd", ".ps1", ".dll"}:
+        platform = "windows"
+        supported = sys.platform.startswith("win")
+    elif suffix in {".appimage", ".deb", ".rpm", ".flatpak", ".desktop"}:
+        platform = "linux"
+        supported = sys.platform.startswith("linux")
+    else:
+        platform = "java"
+        supported = shutil.which("java") is not None
+    if supported:
+        return ProjectArtifact(
+            path, platform, "supported", "target platform matches this host"
+        )
+    host = (
+        "Windows"
+        if sys.platform.startswith("win")
+        else "Linux"
+        if sys.platform.startswith("linux")
+        else sys.platform
+    )
+    return ProjectArtifact(
+        path,
+        platform,
+        "unsupported",
+        f"{platform.title()} artifact is unsupported on {host}",
     )
 
 
@@ -290,8 +351,8 @@ class ProjectScanner:
                 snapshot_id = uuid4()
                 connection.execute(
                     "INSERT INTO project_scan_snapshots "
-                    "(id, tenant_id, project_id, scanned_at, git_branch, git_commit, git_dirty, git_change_count, manifests_json, entrypoints_json, findings_json, health) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "(id, tenant_id, project_id, scanned_at, git_branch, git_commit, git_dirty, git_change_count, manifests_json, entrypoints_json, findings_json, health, artifacts_json) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         str(snapshot_id),
                         tenant_id,
@@ -305,6 +366,19 @@ class ProjectScanner:
                         json.dumps(scan.entrypoints, separators=(",", ":")),
                         json.dumps(scan.findings, separators=(",", ":")),
                         scan.health,
+                        json.dumps(
+                            [
+                                {
+                                    "path": artifact.path,
+                                    "platform": artifact.platform,
+                                    "status": artifact.status,
+                                    "reason": artifact.reason,
+                                }
+                                for artifact in scan.artifacts
+                            ],
+                            sort_keys=True,
+                            separators=(",", ":"),
+                        ),
                     ),
                 )
                 event_type = "project.scanned"
@@ -348,6 +422,7 @@ class ProjectScanner:
                         scan.entrypoints,
                         scan.findings,
                         scan.health,
+                        scan.artifacts,
                     )
                 )
         return tuple(recorded)
@@ -379,4 +454,7 @@ class ProjectScanner:
             tuple(json.loads(row["entrypoints_json"])),
             tuple(json.loads(row["findings_json"])),
             row["health"],
+            tuple(
+                ProjectArtifact(**item) for item in json.loads(row["artifacts_json"])
+            ),
         )
