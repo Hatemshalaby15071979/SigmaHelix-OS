@@ -113,14 +113,14 @@ gates:
         evidence: docs/execution/evidence/P1-004.md
       - id: P1-005
         title: Structured logging and redaction
-        status: ready
+        status: done
         depends_on: [P1-004]
         acceptance:
           - "Secret-pattern test yields zero leaks"
         evidence: docs/execution/evidence/P1-005.md
       - id: P1-006
         title: Hash-chained audit log
-        status: ready
+        status: in_progress
         depends_on: [P1-002]
         acceptance:
           - "1,000-event chain verifies; tamper detected"

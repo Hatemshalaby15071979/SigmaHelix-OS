@@ -16,3 +16,5 @@
 - Completed P1-004: added XDG-derived defaults, YAML and environment precedence, secret-setting rejection, a fail-closed OS-keyring facade, and a hash-pinned `keyring` dependency. Clean-environment CI passed (39 core/ledger tests; 27 offline desktop tests). No real system keyring or credentials were accessed.
 - Durability decision: kept SQLite `synchronous=FULL` to meet the committed-data power-loss requirement; see ADR 0003.
 - P1-005 (structured logging and redaction) is now the next eligible task.
+- Completed P1-005: added local JSON-lines logging, seven-day UTC rotation, owner-only log permissions, and message/field/exception redaction. Clean CI passed (49 core/ledger tests; 27 offline desktop tests).
+- P1-006 (hash-chained audit log) is now in progress.
