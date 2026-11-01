@@ -1,0 +1,81 @@
+version: 1
+project: sigmahelix
+gates:
+  - id: P0
+    name: Truth and safety net
+    status: in_progress
+    tasks:
+      - id: P0-001
+        title: Backup workspace to second physical disk with checksum manifest
+        status: done
+        depends_on: []
+        acceptance:
+          - "archive exists on /dev/sda2"
+          - "sha256 manifest verifies"
+          - "restore of 3 sampled files matches byte-for-byte"
+        evidence: docs/execution/evidence/P0-001.md
+        risk: R1
+      - id: P0-002
+        title: Initialize sigmahelix git repository and first commit
+        status: done
+        depends_on: [P0-001]
+        acceptance:
+          - "git log has the baseline; no secrets, no models, no venvs"
+        evidence: docs/execution/evidence/P0-002.md
+      - id: P0-003
+        title: Import governance and app into the SigmaHelix tree
+        status: done
+        depends_on: [P0-002]
+        acceptance:
+          - "Tests pass in the new tree"
+        evidence: docs/execution/evidence/P0-003.md
+      - id: P0-004
+        title: Rename product to SigmaHelix everywhere user-visible
+        status: done
+        depends_on: [P0-003]
+        acceptance:
+          - "sigmahelix --version; window title; spec; README"
+        evidence: docs/execution/evidence/P0-004.md
+      - id: P0-005
+        title: Correction notice for stage-2/FINAL_REPORT.md
+        status: done
+        depends_on: [P0-003]
+        acceptance:
+          - "Notice file exists; original unedited; index links both"
+        evidence: docs/execution/evidence/P0-005.md
+      - id: P0-006
+        title: Remove or repair stray root .github/ and .env.example
+        status: done
+        depends_on: [P0-003]
+        acceptance:
+          - "No CI references a missing path"
+        evidence: docs/execution/evidence/P0-006.md
+      - id: P0-007
+        title: Threat model v1 for SigmaHelix
+        status: done
+        depends_on: [P0-003]
+        acceptance:
+          - "STRIDE table + data-flow diagram + 10 abuse cases"
+        evidence: docs/execution/evidence/P0-007.md
+      - id: P0-008
+        title: "CI skeleton: lint, type, unit"
+        status: done
+        depends_on: [P0-007]
+        acceptance:
+          - "Green on the baseline commit"
+        evidence: docs/execution/evidence/P0-008.md
+      - id: P0-009
+        title: LEDGER.yaml and runner script
+        status: done
+        depends_on: [P0-008]
+        acceptance:
+          - "Runner selects the correct next task"
+        evidence: docs/execution/evidence/P0-009.md
+      - id: P0-010
+        title: Dependency pinning and hash lockfile
+        status: ready
+        depends_on: [P0-009]
+        acceptance:
+          - "pip install --require-hashes succeeds in a clean venv"
+        evidence: docs/execution/evidence/P0-010.md
+        risk: R1
