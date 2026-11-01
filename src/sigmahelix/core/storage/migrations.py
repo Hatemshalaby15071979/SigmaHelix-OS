@@ -154,6 +154,57 @@ DROP TABLE IF EXISTS legacy_imports;
 """,
         rollback_requires_empty=("legacy_imports",),
     ),
+    Migration(
+        version=5,
+        name="recurring_task_occurrences_v5",
+        up_sql="""
+CREATE TABLE task_series (
+    id TEXT NOT NULL,
+    tenant_id TEXT NOT NULL CHECK(length(trim(tenant_id)) > 0),
+    title TEXT NOT NULL CHECK(length(trim(title)) > 0),
+    description TEXT NOT NULL DEFAULT '',
+    project_id TEXT,
+    rule_json TEXT NOT NULL CHECK(json_valid(rule_json)),
+    created_at TEXT NOT NULL,
+    active INTEGER NOT NULL CHECK(active IN (0, 1)),
+    last_materialized_through TEXT,
+    PRIMARY KEY (id),
+    UNIQUE (tenant_id, id),
+    FOREIGN KEY (tenant_id, project_id) REFERENCES projects(tenant_id, id) ON DELETE RESTRICT
+);
+CREATE INDEX idx_task_series_tenant_active ON task_series(tenant_id, active, id);
+CREATE TABLE task_occurrences (
+    id TEXT NOT NULL,
+    tenant_id TEXT NOT NULL CHECK(length(trim(tenant_id)) > 0),
+    series_id TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    scheduled_for TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE (tenant_id, series_id, scheduled_for),
+    UNIQUE (tenant_id, task_id),
+    FOREIGN KEY (tenant_id, series_id) REFERENCES task_series(tenant_id, id) ON DELETE RESTRICT,
+    FOREIGN KEY (tenant_id, task_id) REFERENCES tasks(tenant_id, id) ON DELETE RESTRICT
+);
+CREATE INDEX idx_task_occurrences_tenant_series_date
+    ON task_occurrences(tenant_id, series_id, scheduled_for);
+CREATE TRIGGER task_occurrences_no_update
+BEFORE UPDATE ON task_occurrences BEGIN
+    SELECT RAISE(ABORT, 'task occurrences are append-only');
+END;
+CREATE TRIGGER task_occurrences_no_delete
+BEFORE DELETE ON task_occurrences BEGIN
+    SELECT RAISE(ABORT, 'task occurrences are append-only');
+END;
+""",
+        down_sql="""
+DROP TRIGGER IF EXISTS task_occurrences_no_delete;
+DROP TRIGGER IF EXISTS task_occurrences_no_update;
+DROP TABLE IF EXISTS task_occurrences;
+DROP TABLE IF EXISTS task_series;
+""",
+        rollback_requires_empty=("task_occurrences", "task_series"),
+    ),
 )
 
 

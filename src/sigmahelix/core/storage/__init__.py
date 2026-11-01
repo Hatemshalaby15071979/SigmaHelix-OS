@@ -16,6 +16,7 @@ from .migrations import (
     MigrationError,
     MigrationRunner,
 )
+from .occurrences import OccurrenceError, OccurrenceService
 from .repositories import (
     ApprovalRepository,
     EvidenceRepository,
@@ -51,6 +52,8 @@ __all__ = [
     "LegacySessionImporter",
     "EventRepository",
     "NoteRepository",
+    "OccurrenceError",
+    "OccurrenceService",
     "ProjectRepository",
     "RepositoryOperationError",
     "TaskRepository",

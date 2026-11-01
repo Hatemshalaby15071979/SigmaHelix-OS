@@ -12,6 +12,8 @@ from .models import (
     Project,
     RiskLevel,
     Task,
+    TaskOccurrence,
+    TaskSeries,
     TaskStatus,
 )
 from .recurrence import (
@@ -38,6 +40,8 @@ from .storage import (
     LegacyImportError,
     LegacyImportResult,
     LegacySessionImporter,
+    OccurrenceError,
+    OccurrenceService,
 )
 
 __all__ = [
@@ -64,6 +68,8 @@ __all__ = [
     "LegacyImportResult",
     "LegacySessionImporter",
     "Note",
+    "OccurrenceError",
+    "OccurrenceService",
     "Project",
     "RecurrenceError",
     "RecurrenceFrequency",
@@ -73,6 +79,8 @@ __all__ = [
     "SecretStoreError",
     "Settings",
     "Task",
+    "TaskOccurrence",
+    "TaskSeries",
     "TaskStatus",
     "configure_logging",
     "load_settings",

@@ -1,4 +1,4 @@
-# Durable core schema v4
+# Durable core schema v5
 
 ```mermaid
 erDiagram
@@ -100,8 +100,29 @@ erDiagram
         integer task_count
         integer note_count
     }
+    TASK_SERIES ||--o{ TASK_OCCURRENCES : "materializes"
+    TASKS ||--o| TASK_OCCURRENCES : "occurrence task"
+    TASK_SERIES {
+        text id PK
+        text tenant_id
+        text title
+        text description
+        text project_id FK
+        text rule_json
+        text created_at
+        integer active
+        text last_materialized_through
+    }
+    TASK_OCCURRENCES {
+        text id PK
+        text tenant_id
+        text series_id FK
+        text task_id FK
+        text scheduled_for
+        text created_at
+    }
 ```
 
 `id` is a UUID primary key. Project relationships use composite foreign keys on `(tenant_id, project_id)` to reject cross-tenant links. Tasks, notes, and projects are soft-deleted; event, evidence, and evidence-tag rows are append-only at both repository and SQLite-trigger boundaries. Approval rows retain their state transitions in place, with decision metadata and expiry constraints.
 
-Evidence tags are normalized into `evidence_tags`; the `evidence_records` view assembles them for typed reads. Schema v2 adds the globally sequenced, tenant-labelled audit chain; its entity reference is intentionally polymorphic and is not a foreign key. Schema v3 adds `event_stream`, whose sequence cursor references each immutable event. Schema v4 adds the append-only import ledger that makes legacy in-memory snapshot import idempotent. The generated diagram is based on schema analyzer output, with the tenant-scoped composite foreign-key labels retained from the actual DDL.
+Evidence tags are normalized into `evidence_tags`; the `evidence_records` view assembles them for typed reads. Schema v2 adds the globally sequenced, tenant-labelled audit chain; its entity reference is intentionally polymorphic and is not a foreign key. Schema v3 adds `event_stream`, whose sequence cursor references each immutable event. Schema v4 adds the append-only import ledger that makes legacy in-memory snapshot import idempotent. Schema v5 stores recurrence definitions separately from immutable series/date occurrence links to materialized tasks; task completion mutates the task and does not mutate the series or occurrence link. All links are tenant scoped. The generated diagram is based on schema analyzer output, with the tenant-scoped composite foreign-key labels retained from the actual DDL.

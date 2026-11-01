@@ -166,14 +166,14 @@ gates:
         evidence: docs/execution/evidence/P2-001.md
       - id: P2-002
         title: Occurrence materialization and completion semantics
-        status: in_progress
+        status: done
         depends_on: [P2-001]
         acceptance:
           - "Completing one occurrence does not kill the series"
         evidence: docs/execution/evidence/P2-002.md
       - id: P2-003
         title: Scheduler with persisted jobs and fake clock
-        status: ready
+        status: in_progress
         depends_on: [P2-002]
         acceptance:
           - "Fires within 2 seconds in test; no duplicates"

@@ -30,22 +30,24 @@ def _application_objects(database: Database) -> set[tuple[str, str]]:
     return {(row["type"], row["name"]) for row in rows}
 
 
-def test_migration_runner_applies_v0_to_v4_and_rolls_back_empty_database(tmp_path):
+def test_migration_runner_applies_v0_to_v5_and_rolls_back_empty_database(tmp_path):
     database = Database(tmp_path / "migrations.db")
     runner = MigrationRunner(database)
 
     assert runner.current_version() == 0
-    assert runner.upgrade() == 4
+    assert runner.upgrade() == 5
     assert ("table", "tasks") in _application_objects(database)
     assert ("table", "audit_log") in _application_objects(database)
     assert ("table", "event_stream") in _application_objects(database)
     assert ("table", "legacy_imports") in _application_objects(database)
+    assert ("table", "task_series") in _application_objects(database)
+    assert ("table", "task_occurrences") in _application_objects(database)
     assert ("view", "evidence_records") in _application_objects(database)
 
     assert runner.downgrade(0) == 0
     assert _application_objects(database) == set()
-    assert runner.upgrade() == 4
-    assert _version(database) == 4
+    assert runner.upgrade() == 5
+    assert _version(database) == 5
 
 
 def test_migration_runner_refuses_downgrade_when_it_would_drop_records(tmp_path):
@@ -88,7 +90,7 @@ def test_migration_runner_rejects_untracked_and_newer_schemas(tmp_path):
 
     newer = Database(tmp_path / "newer.db")
     with newer.connection() as connection:
-        connection.execute("PRAGMA user_version = 5")
+        connection.execute("PRAGMA user_version = 6")
     with pytest.raises(MigrationError, match="newer than supported"):
         MigrationRunner(newer).upgrade()
 
@@ -108,10 +110,11 @@ def test_upgrade_and_downgrade_targets_cannot_move_in_the_wrong_direction(tmp_pa
             Migration(3, "v3", "", ""),
             Migration(4, "v4", "", ""),
             Migration(5, "v5", "", ""),
+            Migration(6, "v6", "", ""),
         ),
     )
     with pytest.raises(MigrationError, match="above the current version"):
-        extended_runner.downgrade(target_version=5)
+        extended_runner.downgrade(target_version=6)
 
 
 def test_migration_versions_must_be_contiguous(tmp_path):

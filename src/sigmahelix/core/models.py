@@ -6,11 +6,13 @@ import json
 import math
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Mapping
 from uuid import UUID, uuid4
+
+from .recurrence import RecurrenceRule
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _LOCAL_TENANT = "local"
@@ -129,6 +131,64 @@ class Task:
         object.__setattr__(self, "updated_at", updated)
         if self.due_at is not None:
             object.__setattr__(self, "due_at", _aware_utc(self.due_at, "due_at"))
+
+
+@dataclass(frozen=True, slots=True)
+class TaskSeries:
+    """A recurring task definition independent from its materialized tasks."""
+
+    title: str
+    rule: RecurrenceRule
+    id: UUID = field(default_factory=uuid4)
+    description: str = ""
+    project_id: UUID | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    tenant_id: str = _LOCAL_TENANT
+    active: bool = True
+    last_materialized_through: date | None = None
+
+    def __post_init__(self) -> None:
+        _non_empty(self.title, "title")
+        if not isinstance(self.rule, RecurrenceRule):
+            raise DomainValidationError("rule must be a RecurrenceRule")
+        if not isinstance(self.id, UUID):
+            raise DomainValidationError("id must be a UUID")
+        if self.project_id is not None and not isinstance(self.project_id, UUID):
+            raise DomainValidationError("project_id must be a UUID or None")
+        if not isinstance(self.description, str):
+            raise DomainValidationError("description must be a string")
+        _non_empty(self.tenant_id, "tenant_id")
+        if not isinstance(self.active, bool):
+            raise DomainValidationError("active must be a boolean")
+        object.__setattr__(
+            self, "created_at", _aware_utc(self.created_at, "created_at")
+        )
+        if self.last_materialized_through is not None and (
+            not isinstance(self.last_materialized_through, date)
+            or isinstance(self.last_materialized_through, datetime)
+        ):
+            raise DomainValidationError(
+                "last_materialized_through must be a date or None"
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class TaskOccurrence:
+    """One task materialized from a recurring series on a calendar date."""
+
+    series_id: UUID
+    scheduled_for: date
+    task: Task
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.series_id, UUID):
+            raise DomainValidationError("series_id must be a UUID")
+        if not isinstance(self.scheduled_for, date) or isinstance(
+            self.scheduled_for, datetime
+        ):
+            raise DomainValidationError("scheduled_for must be a date")
+        if not isinstance(self.task, Task):
+            raise DomainValidationError("task must be a Task")
 
 
 @dataclass(frozen=True, slots=True)

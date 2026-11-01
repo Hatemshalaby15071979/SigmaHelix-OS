@@ -30,3 +30,5 @@
 - P1 (Durable core) is complete. P2-001 (recurrence engine) is now in progress; the P2 task set has been added to the execution ledger.
 - Completed P2-001: added deterministic date-based daily/weekly/monthly recurrence with weekday filters, every-N intervals, month-end clamping, count/end limits, and cursor expansion. The 10,000-rule generated property suite and full CI passed (89 core/ledger; 27 offline desktop tests).
 - P2-002 (occurrence materialization and completion semantics) is now in progress.
+- Completed P2-002: schema v5 separates recurring task definitions from immutable date/task occurrence links. Materialization is deterministic, resumable, concurrent-safe, and atomic with its event/audit entry; completing one task leaves the series active. Full CI passed (95 core/ledger; 27 offline desktop tests).
+- P2-003 (persisted scheduler with fake clock) is now in progress.
