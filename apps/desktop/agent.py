@@ -24,7 +24,7 @@ from voice import VoiceEngine
 OLLAMA_HOSTS = [h for h in (os.environ.get("OLLAMA_HOSTS", "http://localhost:11435,http://localhost:11434")).split(",") if h]
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2:1b")
 
-SYSTEM_PROMPT = """You are the Company OS assistant running entirely locally on the user's machine. \
+SYSTEM_PROMPT = """You are the SigmaHelix assistant running entirely locally on the user's machine. \
 You manage tasks, notes, projects, a calendar, app launching, and a released-app explorer.
 
 The user may speak naturally. Decide the single best action and respond ONLY with compact JSON, no markdown:
@@ -306,7 +306,7 @@ class Agent:
 
         # greetings + fallback
         if "hello" in text or "hi " == text[:3] or text == "hi":
-            return "Hello! 👋 I'm your Company OS assistant. Talk to me naturally, or type 'help'."
+            return "Hello! 👋 I'm your SigmaHelix assistant. Talk to me naturally, or type 'help'."
         if "help" in text or "commands" in text:
             return self._default_help()
         return ("I didn't catch a clear action." + ("" if not self.llm_available else "") +

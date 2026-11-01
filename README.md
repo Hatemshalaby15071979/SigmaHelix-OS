@@ -9,3 +9,8 @@ Execution is in P0 (truth and safety net). No release or production-readiness cl
 ## Source documents
 
 The approved plan and Tommy runtime specification are maintained in `docs/governance/`.
+
+## Local commands
+
+- `PATH="$PWD/bin:$PATH" sigmahelix --version` reports the repository version.
+- `bin/sigmahelix` opens the desktop app; `bin/sigmahelix --cli` starts the console interface.

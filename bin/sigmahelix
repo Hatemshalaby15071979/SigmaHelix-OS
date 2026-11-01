@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+version="$(<"$repo_root/VERSION")"
+if [[ "${1:-}" == "--version" || "${1:-}" == "-V" ]]; then
+  printf 'sigmahelix %s\n' "$version"
+  exit 0
+fi
+if [[ "${1:-}" == "--cli" ]]; then
+  shift
+  exec python3 "$repo_root/apps/desktop/console_os.py" "$@"
+fi
+exec python3 "$repo_root/apps/desktop/main.py" "$@"

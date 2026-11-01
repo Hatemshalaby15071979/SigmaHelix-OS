@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Company OS — console entrypoint.
+SigmaHelix — console entrypoint.
 Interactive REPL on top of the LLM-first agent:
 
     python console_os.py              # GUI available via main.py
@@ -14,7 +14,7 @@ import sys
 from agent import Agent
 
 BANNER = """══════════════════════════════════════════════════
- COMPANY OS — personal assistant (local LLM)
+ SIGMAHELIX — personal assistant (local LLM)
 ══════════════════════════════════════════════════"""
 
 

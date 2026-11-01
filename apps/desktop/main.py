@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Company OS — main desktop app (CustomTkinter, ADHD-friendly).
+SigmaHelix — main desktop app (CustomTkinter, ADHD-friendly).
 
 - 💬 AI assistant powered by local Ollama (LLM-first, keyword fallback offline)
 - 🎙️ Voice input via microphone (button)
@@ -21,16 +21,17 @@ from theme import ThemeConfig as T
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
-CAREER = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+SIGMAHELIX_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+CAREER = os.path.dirname(SIGMAHELIX_ROOT)
 REPOS_DIR = os.path.join(CAREER, "cloned_repos")
 
 
-class CompanyOSApp:
+class SigmaHelixApp:
     def __init__(self):
         self.agent = Agent()
         self._last_reply = ""          # latest reply text, spoken only via 🔊 Listen
         self.app = ctk.CTk()
-        self.app.title(f"Company OS  ·  local LLM: {self.agent.model} "
+        self.app.title(f"SigmaHelix  ·  local LLM: {self.agent.model} "
                        f"({'ON' if self.agent.llm_available else 'OFF (keyword mode)'})")
         self.app.geometry("1240x780")
         self.app.configure(fg_color=T.colors["bg_main"])
@@ -245,10 +246,10 @@ class CompanyOSApp:
                       "Released apps found:\n" + ("\n".join(f"• {f}" for f in found)
                                                   or "• (none yet — package a project with PyInstaller)"))
         # also scan our own build
-        local = glob.glob(os.path.join(CAREER, "company-os-app", "dist", "*"))
+        local = glob.glob(os.path.join(SIGMAHELIX_ROOT, "apps", "desktop", "dist", "*"))
         if local:
             self._set_box(self.launch_box, self.launch_box.get("1.0", "end") +
-                          "\nCompany OS binaries: " + ", ".join(os.path.basename(p) for p in local))
+                          "\nSigmaHelix binaries: " + ", ".join(os.path.basename(p) for p in local))
 
     def react(self, text):
         self._show_reply(str(text))
@@ -266,7 +267,7 @@ class CompanyOSApp:
 
 if __name__ == "__main__":
     try:
-        CompanyOSApp().run()
+        SigmaHelixApp().run()
     except Exception:
         traceback.print_exc()
         input("Press Enter to close…")

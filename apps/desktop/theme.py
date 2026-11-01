@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Theme — ADHD-friendly dark high-contrast theme for Company OS.
+Theme — ADHD-friendly dark high-contrast theme for SigmaHelix.
 Clear sections, large buttons, minimal clutter, visual separation.
 """
 import customtkinter as ctk
