@@ -21,7 +21,9 @@ payloads.
 ## Consequences
 
 The claim is at-most-once for each scheduled slot. A process crash after claim
-but before callback invocation leaves a `running` record; startup recovery is
-specified by P2-004. Callback side effects must be idempotent where practical.
-Interval jobs retain their scheduled cadence and process delayed slots without
-silently skipping them, at one slot per polling pass.
+leaves a `running` record. P2-004 makes such records and overdue unclaimed slots
+visible in a durable recovery queue; overdue slots require acknowledgement before
+dispatch, while uncertain interrupted callbacks are not retried automatically.
+Callback side effects must be idempotent where practical. Interval jobs retain
+their scheduled cadence and process delayed slots without silently skipping
+them, at one slot per polling pass.

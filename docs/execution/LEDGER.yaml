@@ -180,21 +180,21 @@ gates:
         evidence: docs/execution/evidence/P2-003.md
       - id: P2-004
         title: Missed-run recovery on startup
-        status: in_progress
+        status: done
         depends_on: [P2-003]
         acceptance:
           - "Missed alarms surfaced, never silently dropped"
         evidence: docs/execution/evidence/P2-004.md
       - id: P2-005
         title: Notifications with in-app fallback
-        status: ready
+        status: done
         depends_on: [P2-003]
         acceptance:
           - "Delivery test; no automatic TTS"
         evidence: docs/execution/evidence/P2-005.md
       - id: P2-006
         title: Snooze, dismiss, and reschedule state machine
-        status: ready
+        status: in_progress
         depends_on: [P2-002, P2-003]
         acceptance:
           - "State machine tests"

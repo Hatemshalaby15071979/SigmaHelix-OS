@@ -13,9 +13,12 @@ claim transaction commits; its success or exception type is then persisted in
 secret-like payloads are not stored.
 
 This provides at-most-once handler invocation for a claimed slot, rather than
-exactly-once side effects. If the process dies after claim commit but before
-calling the handler, P2-004 recovery surfaces that interrupted run for explicit
-recovery. Long gaps on interval jobs are processed one slot per scheduler poll;
-P2-004 defines startup missed-run handling. Handlers must be registered in each
-process before polling. Scheduler callbacks are synchronous and should remain
-short; GUI notification delivery is handled by P2-005.
+exactly-once side effects. Call `recover_missed()` once at startup before
+polling. It persists overdue unclaimed slots and interrupted `running` claims,
+emits an event and audit record, and returns them for review. An overdue slot
+stays blocked from dispatch until `acknowledge_missed()` is called; after that,
+the ordinary poll can deliver it. An interrupted claim is never automatically
+retried because its side effects may already have happened. Long gaps on
+interval jobs are surfaced one scheduled slot per poll. Handlers must be
+registered in each process before polling. Scheduler callbacks are synchronous
+and should remain short; GUI notification delivery is handled by P2-005.

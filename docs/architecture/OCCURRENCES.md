@@ -4,4 +4,4 @@ Schema v5 stores a recurring task definition in `task_series` and each materiali
 
 `OccurrenceService.materialize()` advances a date watermark in the same write transaction as the task, occurrence receipt, persistent event, and audit record. A full batch advances only to its last generated date, so callers can repeat the same `through` date until the range is drained. Repeated materialization does not create duplicates. Completion changes one task's status and records its event/audit entry; the series remains active and later dates can still be materialized. Pausing a series prevents future materialization without changing existing occurrences.
 
-Timezone-aware wall-clock alarms, snooze, notifications, and scheduler recovery are separate P2 tasks.
+Timezone-aware wall-clock alarms and snooze remain separate P2 tasks. Persisted scheduling, missed-run recovery, and notification delivery are documented in `SCHEDULER.md` and `NOTIFICATIONS.md`.

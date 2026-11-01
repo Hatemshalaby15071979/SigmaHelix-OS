@@ -1,6 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from threading import Lock
+from uuid import NAMESPACE_URL, uuid5
 
 import pytest
 
@@ -115,3 +116,60 @@ def test_cancel_tenant_isolation_and_payload_validation(database):
         scheduler.schedule("noop", {}, NOW, interval_seconds=0)
     with pytest.raises(SchedulerError, match="finite JSON"):
         scheduler.schedule("noop", {"value": float("nan")}, NOW)
+
+
+def test_overdue_slot_is_surfaced_blocked_and_runs_after_acknowledgement(database):
+    clock = FakeClock(NOW)
+    scheduler = Scheduler(database, clock)
+    calls = []
+    scheduler.register_handler("alarm", lambda payload: calls.append(payload))
+    job = scheduler.schedule("alarm", {"label": "review"}, NOW)
+    clock.now += timedelta(minutes=5)
+
+    missed = scheduler.recover_missed()
+    assert len(missed) == 1
+    assert missed[0].job_id == job.id
+    assert missed[0].reason == "overdue"
+    assert scheduler.recover_missed() == missed
+    assert scheduler.run_due() == []
+    assert calls == []
+
+    assert scheduler.acknowledge_missed(missed[0].id) is True
+    assert scheduler.acknowledge_missed(missed[0].id) is False
+    assert len(scheduler.run_due()) == 1
+    assert calls == [{"label": "review"}]
+    assert scheduler.list_missed_runs() == []
+    assert (
+        scheduler.list_missed_runs(include_acknowledged=True)[0].state == "acknowledged"
+    )
+
+
+def test_interrupted_claim_is_surfaced_but_never_automatically_retried(database):
+    clock = FakeClock(NOW)
+    scheduler = Scheduler(database, clock)
+    calls = []
+    scheduler.register_handler("work", lambda payload: calls.append(payload))
+    job = scheduler.schedule("work", {"value": 1}, NOW)
+    run_id = uuid5(
+        NAMESPACE_URL,
+        f"sigmahelix:job-run:{job.id}:{NOW.isoformat()}",
+    )
+    with database.transaction() as connection:
+        connection.execute(
+            "INSERT INTO job_runs "
+            "(id, tenant_id, job_id, scheduled_for, started_at, finished_at, status, error_type) "
+            "VALUES (?, 'local', ?, ?, ?, NULL, 'running', NULL)",
+            (str(run_id), str(job.id), NOW.isoformat(), NOW.isoformat()),
+        )
+        connection.execute(
+            "UPDATE scheduled_jobs SET enabled = 0, last_run_at = ? WHERE id = ?",
+            (NOW.isoformat(), str(job.id)),
+        )
+
+    recovered = Scheduler(database, clock).recover_missed()
+    assert len(recovered) == 1
+    assert recovered[0].id == run_id
+    assert recovered[0].reason == "interrupted"
+    assert Scheduler(database, clock).recover_missed() == recovered
+    assert scheduler.run_due() == []
+    assert calls == []

@@ -30,12 +30,12 @@ def _application_objects(database: Database) -> set[tuple[str, str]]:
     return {(row["type"], row["name"]) for row in rows}
 
 
-def test_migration_runner_applies_v0_to_v6_and_rolls_back_empty_database(tmp_path):
+def test_migration_runner_applies_v0_to_v8_and_rolls_back_empty_database(tmp_path):
     database = Database(tmp_path / "migrations.db")
     runner = MigrationRunner(database)
 
     assert runner.current_version() == 0
-    assert runner.upgrade() == 6
+    assert runner.upgrade() == 8
     assert ("table", "tasks") in _application_objects(database)
     assert ("table", "audit_log") in _application_objects(database)
     assert ("table", "event_stream") in _application_objects(database)
@@ -44,12 +44,14 @@ def test_migration_runner_applies_v0_to_v6_and_rolls_back_empty_database(tmp_pat
     assert ("table", "task_occurrences") in _application_objects(database)
     assert ("table", "scheduled_jobs") in _application_objects(database)
     assert ("table", "job_runs") in _application_objects(database)
+    assert ("table", "missed_job_runs") in _application_objects(database)
+    assert ("table", "notifications") in _application_objects(database)
     assert ("view", "evidence_records") in _application_objects(database)
 
     assert runner.downgrade(0) == 0
     assert _application_objects(database) == set()
-    assert runner.upgrade() == 6
-    assert _version(database) == 6
+    assert runner.upgrade() == 8
+    assert _version(database) == 8
 
 
 def test_migration_runner_refuses_downgrade_when_it_would_drop_records(tmp_path):
@@ -92,7 +94,7 @@ def test_migration_runner_rejects_untracked_and_newer_schemas(tmp_path):
 
     newer = Database(tmp_path / "newer.db")
     with newer.connection() as connection:
-        connection.execute("PRAGMA user_version = 7")
+        connection.execute("PRAGMA user_version = 9")
     with pytest.raises(MigrationError, match="newer than supported"):
         MigrationRunner(newer).upgrade()
 
@@ -115,10 +117,12 @@ def test_upgrade_and_downgrade_targets_cannot_move_in_the_wrong_direction(tmp_pa
             Migration(6, "v6", "", ""),
             Migration(7, "v7", "", ""),
             Migration(8, "v8", "", ""),
+            Migration(9, "v9", "", ""),
+            Migration(10, "v10", "", ""),
         ),
     )
     with pytest.raises(MigrationError, match="above the current version"):
-        extended_runner.downgrade(target_version=7)
+        extended_runner.downgrade(target_version=9)
 
 
 def test_migration_versions_must_be_contiguous(tmp_path):

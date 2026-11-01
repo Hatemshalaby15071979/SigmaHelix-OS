@@ -55,6 +55,19 @@ class JobRun:
     error_type: str | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class MissedJobRun:
+    """A durable overdue slot or interrupted callback requiring review."""
+
+    id: UUID
+    job_id: UUID
+    tenant_id: str
+    scheduled_for: datetime
+    detected_at: datetime
+    reason: str
+    state: str
+
+
 def _utc(value: datetime, label: str) -> datetime:
     if (
         not isinstance(value, datetime)
@@ -212,6 +225,10 @@ class Scheduler:
         with self.database.transaction() as connection:
             rows = connection.execute(
                 "SELECT * FROM scheduled_jobs WHERE enabled = 1 AND next_run_at <= ? "
+                "AND NOT EXISTS (SELECT 1 FROM missed_job_runs m "
+                "WHERE m.tenant_id = scheduled_jobs.tenant_id "
+                "AND m.job_id = scheduled_jobs.id AND m.scheduled_for = scheduled_jobs.next_run_at "
+                "AND m.state = 'pending') "
                 "ORDER BY next_run_at, id",
                 (now.isoformat(),),
             ).fetchall()
@@ -348,6 +365,147 @@ class Scheduler:
                 )
             )
         return completed
+
+    def recover_missed(self, tenant_id: str = "local") -> list[MissedJobRun]:
+        """Persist and return overdue and interrupted slots for explicit review.
+
+        Call once during process startup before polling due work. Overdue slots
+        remain blocked from dispatch until acknowledged. Interrupted slots are
+        reported but are not automatically retried because their side effects
+        may already have happened before the process stopped.
+        """
+        if not isinstance(tenant_id, str) or not tenant_id.strip():
+            raise ValueError("tenant_id must be a non-empty string")
+        now = _utc(self._clock(), "clock")
+        discovered: list[tuple[UUID, str, str, datetime, str]] = []
+        with self.database.transaction() as connection:
+            overdue_rows = connection.execute(
+                "SELECT j.id, j.tenant_id, j.next_run_at FROM scheduled_jobs j "
+                "WHERE j.enabled = 1 AND j.next_run_at <= ? "
+                "AND NOT EXISTS (SELECT 1 FROM job_runs r WHERE r.tenant_id = j.tenant_id "
+                "AND r.job_id = j.id AND r.scheduled_for = j.next_run_at) "
+                "AND NOT EXISTS (SELECT 1 FROM missed_job_runs m WHERE m.tenant_id = j.tenant_id "
+                "AND m.job_id = j.id AND m.scheduled_for = j.next_run_at) "
+                "AND j.tenant_id = ?",
+                (now.isoformat(), tenant_id),
+            ).fetchall()
+            interrupted_rows = connection.execute(
+                "SELECT r.id, r.job_id, r.tenant_id, r.scheduled_for "
+                "FROM job_runs r WHERE r.status = 'running' "
+                "AND NOT EXISTS (SELECT 1 FROM missed_job_runs m WHERE m.tenant_id = r.tenant_id "
+                "AND m.job_id = r.job_id AND m.scheduled_for = r.scheduled_for) "
+                "AND r.tenant_id = ?",
+                (tenant_id,),
+            ).fetchall()
+            discovered.extend(
+                (
+                    uuid5(
+                        NAMESPACE_URL,
+                        f"sigmahelix:job-run:{row['id']}:{row['next_run_at']}",
+                    ),
+                    row["id"],
+                    row["tenant_id"],
+                    datetime.fromisoformat(row["next_run_at"]),
+                    "overdue",
+                )
+                for row in overdue_rows
+            )
+            discovered.extend(
+                (
+                    UUID(row["id"]),
+                    row["job_id"],
+                    row["tenant_id"],
+                    datetime.fromisoformat(row["scheduled_for"]),
+                    "interrupted",
+                )
+                for row in interrupted_rows
+            )
+            for run_id, job_id, record_tenant_id, scheduled_for, reason in discovered:
+                missed_cursor = connection.execute(
+                    "INSERT OR IGNORE INTO missed_job_runs "
+                    "(id, tenant_id, job_id, scheduled_for, detected_at, reason, state, acknowledged_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, 'pending', NULL)",
+                    (
+                        str(run_id),
+                        record_tenant_id,
+                        job_id,
+                        scheduled_for.isoformat(),
+                        now.isoformat(),
+                        reason,
+                    ),
+                )
+                if missed_cursor.rowcount != 1:
+                    continue
+                event_type = "scheduler.job.missed"
+                event_id = uuid5(NAMESPACE_URL, f"sigmahelix:{event_type}:{run_id}")
+                audit_payload = {
+                    "job_id": job_id,
+                    "run_id": str(run_id),
+                    "scheduled_for": scheduled_for.isoformat(),
+                    "reason": reason,
+                }
+                connection.execute(
+                    "INSERT OR IGNORE INTO events (id, tenant_id, event_type, payload_json, occurred_at) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (
+                        str(event_id),
+                        record_tenant_id,
+                        event_type,
+                        json.dumps(
+                            audit_payload, sort_keys=True, separators=(",", ":")
+                        ),
+                        now.isoformat(),
+                    ),
+                )
+                self._audit.append_in_transaction(
+                    connection,
+                    event_type,
+                    "scheduled_job",
+                    job_id,
+                    audit_payload,
+                    tenant_id=record_tenant_id,
+                    occurred_at=now,
+                )
+        return self.list_missed_runs(tenant_id)
+
+    def list_missed_runs(
+        self, tenant_id: str = "local", include_acknowledged: bool = False
+    ) -> list[MissedJobRun]:
+        """List missed slots for a tenant, pending first by scheduled time."""
+        if not isinstance(tenant_id, str) or not tenant_id.strip():
+            raise ValueError("tenant_id must be a non-empty string")
+        with self.database.connection() as connection:
+            query = "SELECT * FROM missed_job_runs WHERE tenant_id = ?"
+            parameters: tuple[str, ...] = (tenant_id,)
+            if not include_acknowledged:
+                query += " AND state = 'pending'"
+            query += " ORDER BY scheduled_for, id"
+            rows = connection.execute(query, parameters).fetchall()
+        return [
+            MissedJobRun(
+                UUID(row["id"]),
+                UUID(row["job_id"]),
+                row["tenant_id"],
+                datetime.fromisoformat(row["scheduled_for"]),
+                datetime.fromisoformat(row["detected_at"]),
+                row["reason"],
+                row["state"],
+            )
+            for row in rows
+        ]
+
+    def acknowledge_missed(self, run_id: UUID, tenant_id: str = "local") -> bool:
+        """Acknowledge a missed slot; an unclaimed overdue slot may then run."""
+        if not isinstance(run_id, UUID):
+            raise ValueError("run_id must be a UUID")
+        now = _utc(self._clock(), "clock")
+        with self.database.transaction() as connection:
+            cursor = connection.execute(
+                "UPDATE missed_job_runs SET state = 'acknowledged', acknowledged_at = ? "
+                "WHERE id = ? AND tenant_id = ? AND state = 'pending'",
+                (now.isoformat(), str(run_id), tenant_id),
+            )
+        return cursor.rowcount == 1
 
     def list_runs(self, job_id: UUID, tenant_id: str = "local") -> list[JobRun]:
         """Return a job's durable runs in scheduled order."""

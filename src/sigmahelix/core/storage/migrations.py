@@ -263,6 +263,93 @@ DROP TABLE IF EXISTS scheduled_jobs;
 """,
         rollback_requires_empty=("job_runs", "scheduled_jobs"),
     ),
+    Migration(
+        version=7,
+        name="missed_scheduler_run_recovery_v7",
+        up_sql="""
+CREATE TABLE missed_job_runs (
+    id TEXT NOT NULL PRIMARY KEY,
+    tenant_id TEXT NOT NULL CHECK(length(trim(tenant_id)) > 0),
+    job_id TEXT NOT NULL,
+    scheduled_for TEXT NOT NULL,
+    detected_at TEXT NOT NULL,
+    reason TEXT NOT NULL CHECK(reason IN ('overdue', 'interrupted')),
+    state TEXT NOT NULL CHECK(state IN ('pending', 'acknowledged')),
+    acknowledged_at TEXT,
+    UNIQUE (tenant_id, job_id, scheduled_for),
+    FOREIGN KEY (tenant_id, job_id) REFERENCES scheduled_jobs(tenant_id, id) ON DELETE RESTRICT
+);
+CREATE INDEX idx_missed_job_runs_pending
+    ON missed_job_runs(tenant_id, state, detected_at);
+CREATE TRIGGER missed_job_runs_state_transition
+BEFORE UPDATE ON missed_job_runs
+WHEN OLD.state != 'pending'
+  OR NEW.state != 'acknowledged'
+  OR NEW.id != OLD.id
+  OR NEW.tenant_id != OLD.tenant_id
+  OR NEW.job_id != OLD.job_id
+  OR NEW.scheduled_for != OLD.scheduled_for
+  OR NEW.detected_at != OLD.detected_at
+  OR NEW.reason != OLD.reason
+  OR NEW.acknowledged_at IS NULL
+BEGIN
+    SELECT RAISE(ABORT, 'missed job run transition is invalid');
+END;
+CREATE TRIGGER missed_job_runs_no_delete
+BEFORE DELETE ON missed_job_runs BEGIN
+    SELECT RAISE(ABORT, 'missed job runs are append-only');
+END;
+""",
+        down_sql="""
+DROP TRIGGER IF EXISTS missed_job_runs_no_delete;
+DROP TRIGGER IF EXISTS missed_job_runs_state_transition;
+DROP TABLE IF EXISTS missed_job_runs;
+""",
+        rollback_requires_empty=("missed_job_runs",),
+    ),
+    Migration(
+        version=8,
+        name="notification_inbox_v8",
+        up_sql="""
+CREATE TABLE notifications (
+    id TEXT NOT NULL PRIMARY KEY,
+    tenant_id TEXT NOT NULL CHECK(length(trim(tenant_id)) > 0),
+    dedupe_key TEXT NOT NULL CHECK(length(trim(dedupe_key)) > 0),
+    title TEXT NOT NULL CHECK(length(trim(title)) > 0),
+    body TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    read_at TEXT,
+    native_status TEXT NOT NULL CHECK(native_status IN ('pending', 'delivered', 'unavailable', 'failed')),
+    UNIQUE (tenant_id, dedupe_key)
+);
+CREATE INDEX idx_notifications_inbox
+    ON notifications(tenant_id, read_at, created_at DESC);
+CREATE TRIGGER notifications_state_transition
+BEFORE UPDATE ON notifications
+WHEN NEW.id != OLD.id
+  OR NEW.tenant_id != OLD.tenant_id
+  OR NEW.dedupe_key != OLD.dedupe_key
+  OR NEW.title != OLD.title
+  OR NEW.body != OLD.body
+  OR NEW.created_at != OLD.created_at
+  OR (NEW.native_status != OLD.native_status
+      AND (OLD.native_status != 'pending' OR NEW.native_status NOT IN ('delivered', 'unavailable', 'failed')))
+  OR (NEW.read_at IS NOT OLD.read_at AND (OLD.read_at IS NOT NULL OR NEW.read_at IS NULL))
+BEGIN
+    SELECT RAISE(ABORT, 'notification state transition is invalid');
+END;
+CREATE TRIGGER notifications_no_delete
+BEFORE DELETE ON notifications BEGIN
+    SELECT RAISE(ABORT, 'notifications are append-only');
+END;
+""",
+        down_sql="""
+DROP TRIGGER IF EXISTS notifications_no_delete;
+DROP TRIGGER IF EXISTS notifications_state_transition;
+DROP TABLE IF EXISTS notifications;
+""",
+        rollback_requires_empty=("notifications",),
+    ),
 )
 
 

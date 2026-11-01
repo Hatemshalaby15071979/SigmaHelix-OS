@@ -16,8 +16,9 @@ from .migrations import (
     MigrationError,
     MigrationRunner,
 )
+from .notifications import Notification, NotificationError, NotificationService
 from .occurrences import OccurrenceError, OccurrenceService
-from .scheduler import JobRun, ScheduledJob, Scheduler, SchedulerError
+from .scheduler import JobRun, MissedJobRun, ScheduledJob, Scheduler, SchedulerError
 from .repositories import (
     ApprovalRepository,
     EvidenceRepository,
@@ -47,6 +48,10 @@ __all__ = [
     "MigrationDataLossError",
     "MigrationError",
     "MigrationRunner",
+    "MissedJobRun",
+    "Notification",
+    "NotificationError",
+    "NotificationService",
     "LegacyImportConflict",
     "LegacyImportError",
     "LegacyImportResult",
