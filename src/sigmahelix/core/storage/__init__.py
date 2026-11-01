@@ -1,6 +1,7 @@
 """SQLite persistence for the SigmaHelix durable core."""
 
 from .audit import AuditLog, AuditLogEntry, AuditLogError, AuditVerification
+from .backup import BackupError, BackupManifest, DatabaseBackup
 from .database import Database
 from .event_bus import EventBus, EventBusError, EventDispatchError, EventEnvelope
 from .migrations import (
@@ -25,7 +26,10 @@ __all__ = [
     "AuditLogEntry",
     "AuditLogError",
     "AuditVerification",
+    "BackupError",
+    "BackupManifest",
     "Database",
+    "DatabaseBackup",
     "EventBus",
     "EventBusError",
     "EventDispatchError",

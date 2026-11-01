@@ -134,14 +134,14 @@ gates:
         evidence: docs/execution/evidence/P1-007.md
       - id: P1-008
         title: Backup, export, and restore commands
-        status: in_progress
+        status: done
         depends_on: [P1-002, P1-003]
         acceptance:
           - "Round-trip byte-identical"
         evidence: docs/execution/evidence/P1-008.md
       - id: P1-009
         title: Crash-safety test during write
-        status: ready
+        status: in_progress
         depends_on: [P1-002]
         acceptance:
           - "WAL recovery; no corruption"

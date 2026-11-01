@@ -6,6 +6,17 @@ if [[ "${1:-}" == "--version" || "${1:-}" == "-V" ]]; then
   printf 'sigmahelix %s\n' "$version"
   exit 0
 fi
+if [[ "${1:-}" == "backup" || "${1:-}" == "export" || "${1:-}" == "restore" ]]; then
+  command_name="$1"
+  shift
+  python_bin="$repo_root/.venv/bin/python"
+  if [[ ! -x "$python_bin" ]]; then
+    echo "Create the local environment with: python3.12 -m venv .venv" >&2
+    exit 2
+  fi
+  export PYTHONPATH="$repo_root/src${PYTHONPATH:+:$PYTHONPATH}"
+  exec "$python_bin" "$repo_root/scripts/db_admin.py" "$command_name" "$@"
+fi
 if [[ "${1:-}" == "--cli" ]]; then
   shift
   python_bin="$repo_root/.venv/bin/python"

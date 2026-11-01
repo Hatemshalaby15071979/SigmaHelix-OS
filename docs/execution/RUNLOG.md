@@ -22,3 +22,5 @@
 - P1-007 (persistent event bus) is now in progress; P1-008 (backup/export/restore) is unblocked and ready.
 - Completed P1-007: migration v3 adds a stable sequence index for immutable events, and `EventBus` provides persist-before-dispatch publish, tenant/type-scoped subscriptions, and cursor-based replay. Clean CI passed (64 core/ledger tests; 27 offline desktop tests).
 - P1-008 (backup, export, and restore) is now in progress.
+- Completed P1-008: added `backup`/`export`/`restore` commands with SQLite online snapshots, SHA-256 sidecars, schema and integrity checks, private files, and overwrite refusal. Full CI passed (70 core/ledger tests; 27 offline desktop tests); isolated CLI export/restore returned identical file hashes.
+- P1-009 (crash safety during writes) is now in progress.
