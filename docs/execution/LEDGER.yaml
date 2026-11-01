@@ -141,14 +141,14 @@ gates:
         evidence: docs/execution/evidence/P1-008.md
       - id: P1-009
         title: Crash-safety test during write
-        status: in_progress
+        status: done
         depends_on: [P1-002]
         acceptance:
           - "WAL recovery; no corruption"
         evidence: docs/execution/evidence/P1-009.md
       - id: P1-010
         title: Import legacy in-memory session when available
-        status: ready
+        status: in_progress
         depends_on: [P1-001, P1-002]
         acceptance:
           - "Idempotent importer test"

@@ -24,3 +24,5 @@
 - P1-008 (backup, export, and restore) is now in progress.
 - Completed P1-008: added `backup`/`export`/`restore` commands with SQLite online snapshots, SHA-256 sidecars, schema and integrity checks, private files, and overwrite refusal. Full CI passed (70 core/ledger tests; 27 offline desktop tests); isolated CLI export/restore returned identical file hashes.
 - P1-009 (crash safety during writes) is now in progress.
+- Completed P1-009: an isolated writer spilled 4,000 uncommitted events into WAL, was killed with `SIGKILL`, and reopened with committed state intact, no partial rows, and `integrity_check=ok`. Full CI passed (71 core/ledger tests; 27 offline desktop tests).
+- P1-010 (legacy in-memory session import) is now in progress. The legacy app stores tasks and notes only in live manager objects; no persisted snapshot file was found, so implementation will support importing an explicitly supplied live-session snapshot and report that no historical session was available to migrate.
