@@ -4,7 +4,7 @@ SigmaHelix is a local-first personal operating system and career command centre.
 
 ## Current status
 
-P0 (truth and safety net), P1-001 (domain models), and P1-002 (SQLite persistence) are complete; P1-003 (migrations) is in progress. No release or production-readiness claim is made. See `docs/execution/LEDGER.yaml` for task state and `docs/execution/RUNLOG.md` for session evidence.
+P0 (truth and safety net), P1-001 (domain models), and P1-002 (SQLite persistence) are complete; P1-003 (migrations) is complete; P1-004 (configuration) is in progress. No release or production-readiness claim is made. See `docs/execution/LEDGER.yaml` for task state and `docs/execution/RUNLOG.md` for session evidence.
 
 ## Source documents
 

@@ -9,3 +9,6 @@
 - Completed P1-002: added file-backed SQLite with WAL, foreign-key enforcement, full synchronous writes, busy timeout, private file permissions, tenant-scoped repositories, normalized evidence tags, append-only triggers, and schema/query-plan tests. Full local CI passed (25 core/ledger tests; 27 offline app tests).
 - Schema review: 7 tables, 55 columns, 4 relationships, no high/medium normalization findings. The analyzer did not load JSON index metadata; actual tenant-scoped indexes were confirmed with `EXPLAIN QUERY PLAN`. See `docs/architecture/CORE_SCHEMA_ERD.md` and `docs/execution/evidence/P1-002.md`.
 - P1-003 (migration runner v0→v1 with rollback) is now in progress.
+- Completed P1-003: installed a transactional v0→v1 migration runner, idempotent initialization, schema-state checks, and an empty-database-only rollback guard. Failed DDL leaves no partial objects or version change. Full local CI passed (31 core/ledger tests; 27 offline app tests).
+- The bundled migration generator was run but produced invalid SQLite syntax and `information_schema` validation SQL; no generated output was adopted. See P1-003 evidence and ADR 0002.
+- P1-004 (YAML, environment, and keyring configuration) is now in progress.

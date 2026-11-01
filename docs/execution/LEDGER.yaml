@@ -99,14 +99,14 @@ gates:
         evidence: docs/execution/evidence/P1-002.md
       - id: P1-003
         title: Migration runner v0 to v1 with rollback
-        status: in_progress
+        status: done
         depends_on: [P1-002]
         acceptance:
           - "Forward + rollback tests"
         evidence: docs/execution/evidence/P1-003.md
       - id: P1-004
         title: Config layer with YAML, environment, and keyring
-        status: ready
+        status: in_progress
         depends_on: [P1-001]
         acceptance:
           - "No hardcoded paths; precedence tests"

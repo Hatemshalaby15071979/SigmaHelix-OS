@@ -8,8 +8,6 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
-from .schema import SCHEMA_V1
-
 
 class Database:
     """Owns a file-backed SQLite database and opens configured connections."""
@@ -55,15 +53,7 @@ class Database:
                 raise
 
     def initialize(self) -> None:
-        """Create the current v1 schema; versioned upgrades follow in P1-003."""
-        with self.connection() as connection:
-            try:
-                connection.executescript(
-                    "BEGIN IMMEDIATE;\n"
-                    + SCHEMA_V1
-                    + "\nPRAGMA user_version = 1;\nCOMMIT;"
-                )
-            except BaseException:
-                if connection.in_transaction:
-                    connection.rollback()
-                raise
+        """Upgrade the database through the registered migration sequence."""
+        from .migrations import MigrationRunner
+
+        MigrationRunner(self).upgrade()
