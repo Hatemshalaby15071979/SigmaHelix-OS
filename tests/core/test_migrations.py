@@ -30,12 +30,12 @@ def _application_objects(database: Database) -> set[tuple[str, str]]:
     return {(row["type"], row["name"]) for row in rows}
 
 
-def test_migration_runner_applies_v0_to_v10_and_rolls_back_empty_database(tmp_path):
+def test_migration_runner_applies_v0_to_v11_and_rolls_back_empty_database(tmp_path):
     database = Database(tmp_path / "migrations.db")
     runner = MigrationRunner(database)
 
     assert runner.current_version() == 0
-    assert runner.upgrade() == 10
+    assert runner.upgrade() == 11
     assert ("table", "tasks") in _application_objects(database)
     assert ("table", "audit_log") in _application_objects(database)
     assert ("table", "event_stream") in _application_objects(database)
@@ -49,12 +49,14 @@ def test_migration_runner_applies_v0_to_v10_and_rolls_back_empty_database(tmp_pa
     assert ("table", "notification_alarm_states") in _application_objects(database)
     assert ("table", "notification_actions") in _application_objects(database)
     assert ("table", "project_scan_snapshots") in _application_objects(database)
+    assert ("table", "launcher_profiles") in _application_objects(database)
+    assert ("table", "launcher_runs") in _application_objects(database)
     assert ("view", "evidence_records") in _application_objects(database)
 
     assert runner.downgrade(0) == 0
     assert _application_objects(database) == set()
-    assert runner.upgrade() == 10
-    assert _version(database) == 10
+    assert runner.upgrade() == 11
+    assert _version(database) == 11
 
 
 def test_migration_runner_refuses_downgrade_when_it_would_drop_records(tmp_path):
@@ -97,7 +99,7 @@ def test_migration_runner_rejects_untracked_and_newer_schemas(tmp_path):
 
     newer = Database(tmp_path / "newer.db")
     with newer.connection() as connection:
-        connection.execute("PRAGMA user_version = 11")
+        connection.execute("PRAGMA user_version = 12")
     with pytest.raises(MigrationError, match="newer than supported"):
         MigrationRunner(newer).upgrade()
 
@@ -124,10 +126,11 @@ def test_upgrade_and_downgrade_targets_cannot_move_in_the_wrong_direction(tmp_pa
             Migration(10, "v10", "", ""),
             Migration(11, "v11", "", ""),
             Migration(12, "v12", "", ""),
+            Migration(13, "v13", "", ""),
         ),
     )
     with pytest.raises(MigrationError, match="above the current version"):
-        extended_runner.downgrade(target_version=11)
+        extended_runner.downgrade(target_version=12)
 
 
 def test_migration_versions_must_be_contiguous(tmp_path):
@@ -163,7 +166,7 @@ def test_alarm_migration_backfills_existing_notifications(tmp_path):
             (NOW.isoformat(),),
         )
 
-    assert runner.upgrade() == 10
+    assert runner.upgrade() == 11
     with database.connection() as connection:
         row = connection.execute(
             "SELECT state FROM notification_alarm_states WHERE notification_id = ?",

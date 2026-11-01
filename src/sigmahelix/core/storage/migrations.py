@@ -462,6 +462,96 @@ DROP TABLE IF EXISTS project_scan_snapshots;
 """,
         rollback_requires_empty=("project_scan_snapshots",),
     ),
+    Migration(
+        version=11,
+        name="launcher_profiles_and_run_history_v11",
+        up_sql="""
+CREATE TABLE launcher_profiles (
+    id TEXT NOT NULL PRIMARY KEY,
+    tenant_id TEXT NOT NULL CHECK(length(trim(tenant_id)) > 0),
+    name TEXT NOT NULL CHECK(length(trim(name)) > 0),
+    project_id TEXT,
+    executable TEXT NOT NULL CHECK(length(trim(executable)) > 0),
+    arguments_json TEXT NOT NULL CHECK(json_valid(arguments_json)),
+    working_directory TEXT NOT NULL CHECK(length(trim(working_directory)) > 0),
+    created_at TEXT NOT NULL,
+    enabled INTEGER NOT NULL CHECK(enabled IN (0, 1)),
+    UNIQUE (tenant_id, id),
+    UNIQUE (tenant_id, name),
+    FOREIGN KEY (tenant_id, project_id) REFERENCES projects(tenant_id, id) ON DELETE RESTRICT
+);
+CREATE INDEX idx_launcher_profiles_enabled
+    ON launcher_profiles(tenant_id, enabled, name);
+CREATE TABLE launcher_runs (
+    id TEXT NOT NULL PRIMARY KEY,
+    tenant_id TEXT NOT NULL CHECK(length(trim(tenant_id)) > 0),
+    profile_id TEXT NOT NULL,
+    profile_name TEXT NOT NULL,
+    executable TEXT NOT NULL,
+    arguments_json TEXT NOT NULL CHECK(json_valid(arguments_json)),
+    working_directory TEXT NOT NULL,
+    pid INTEGER,
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    status TEXT NOT NULL CHECK(status IN ('running', 'succeeded', 'failed')),
+    return_code INTEGER,
+    error_type TEXT,
+    FOREIGN KEY (tenant_id, profile_id) REFERENCES launcher_profiles(tenant_id, id) ON DELETE RESTRICT
+);
+CREATE INDEX idx_launcher_runs_history
+    ON launcher_runs(tenant_id, profile_id, started_at DESC);
+CREATE TRIGGER launcher_profiles_disable_only
+BEFORE UPDATE ON launcher_profiles
+WHEN OLD.enabled != 1
+  OR NEW.enabled != 0
+  OR NEW.id != OLD.id
+  OR NEW.tenant_id != OLD.tenant_id
+  OR NEW.name != OLD.name
+  OR NEW.project_id IS NOT OLD.project_id
+  OR NEW.executable != OLD.executable
+  OR NEW.arguments_json != OLD.arguments_json
+  OR NEW.working_directory != OLD.working_directory
+  OR NEW.created_at != OLD.created_at
+BEGIN
+    SELECT RAISE(ABORT, 'launcher profiles are immutable except disable');
+END;
+CREATE TRIGGER launcher_profiles_no_delete
+BEFORE DELETE ON launcher_profiles BEGIN
+    SELECT RAISE(ABORT, 'launcher profiles are retained');
+END;
+CREATE TRIGGER launcher_runs_update_transition
+BEFORE UPDATE ON launcher_runs
+WHEN OLD.status != 'running'
+  OR NEW.status NOT IN ('running', 'succeeded', 'failed')
+  OR NEW.id != OLD.id
+  OR NEW.tenant_id != OLD.tenant_id
+  OR NEW.profile_id != OLD.profile_id
+  OR NEW.profile_name != OLD.profile_name
+  OR NEW.executable != OLD.executable
+  OR NEW.arguments_json != OLD.arguments_json
+  OR NEW.working_directory != OLD.working_directory
+  OR NEW.started_at != OLD.started_at
+  OR (OLD.pid IS NOT NULL AND NEW.pid IS NOT OLD.pid)
+  OR (NEW.status = 'running' AND NEW.finished_at IS NOT NULL)
+  OR (NEW.status != 'running' AND NEW.finished_at IS NULL)
+BEGIN
+    SELECT RAISE(ABORT, 'launcher run transition is invalid');
+END;
+CREATE TRIGGER launcher_runs_no_delete
+BEFORE DELETE ON launcher_runs BEGIN
+    SELECT RAISE(ABORT, 'launcher runs are append-only');
+END;
+""",
+        down_sql="""
+DROP TRIGGER IF EXISTS launcher_runs_no_delete;
+DROP TRIGGER IF EXISTS launcher_runs_update_transition;
+DROP TRIGGER IF EXISTS launcher_profiles_no_delete;
+DROP TRIGGER IF EXISTS launcher_profiles_disable_only;
+DROP TABLE IF EXISTS launcher_runs;
+DROP TABLE IF EXISTS launcher_profiles;
+""",
+        rollback_requires_empty=("launcher_runs", "launcher_profiles"),
+    ),
 )
 
 

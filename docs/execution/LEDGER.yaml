@@ -215,14 +215,14 @@ gates:
         evidence: docs/execution/evidence/P2-008.md
       - id: P2-009
         title: Launcher profiles, command preview, and run history
-        status: in_progress
+        status: done
         depends_on: [P2-007]
         acceptance:
           - "Unknown command never auto-runs"
         evidence: docs/execution/evidence/P2-009.md
       - id: P2-010
         title: Windows-only artifact labelling
-        status: ready
+        status: in_progress
         depends_on: [P2-007]
         acceptance:
           - ".exe marked unsupported on Linux"

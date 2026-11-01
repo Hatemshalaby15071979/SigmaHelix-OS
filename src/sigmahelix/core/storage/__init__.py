@@ -11,6 +11,14 @@ from .legacy_import import (
     LegacyImportResult,
     LegacySessionImporter,
 )
+from .launchers import (
+    CommandPreview,
+    LaunchHandle,
+    LauncherError,
+    LauncherProfile,
+    LauncherRun,
+    LauncherService,
+)
 from .migrations import (
     Migration,
     MigrationDataLossError,
@@ -68,6 +76,12 @@ __all__ = [
     "LegacyImportError",
     "LegacyImportResult",
     "LegacySessionImporter",
+    "CommandPreview",
+    "LaunchHandle",
+    "LauncherError",
+    "LauncherProfile",
+    "LauncherRun",
+    "LauncherService",
     "JobRun",
     "EventRepository",
     "NoteRepository",
