@@ -28,3 +28,5 @@
 - P1-010 (legacy in-memory session import) is now in progress. The legacy app stores tasks and notes only in live manager objects; no persisted snapshot file was found, so implementation will support importing an explicitly supplied live-session snapshot and report that no historical session was available to migrate.
 - Completed P1-010: added an atomic, idempotent live-manager importer with migration v4 receipt, event and audit records, validation, and conflict detection. No legacy app process or persistent snapshot was available, so no historical task/note records were imported. Full CI passed (75 core/ledger tests; 27 offline desktop tests).
 - P1 (Durable core) is complete. P2-001 (recurrence engine) is now in progress; the P2 task set has been added to the execution ledger.
+- Completed P2-001: added deterministic date-based daily/weekly/monthly recurrence with weekday filters, every-N intervals, month-end clamping, count/end limits, and cursor expansion. The 10,000-rule generated property suite and full CI passed (89 core/ledger; 27 offline desktop tests).
+- P2-002 (occurrence materialization and completion semantics) is now in progress.

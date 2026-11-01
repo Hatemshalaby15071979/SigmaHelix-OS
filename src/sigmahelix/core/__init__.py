@@ -14,6 +14,13 @@ from .models import (
     Task,
     TaskStatus,
 )
+from .recurrence import (
+    RecurrenceError,
+    RecurrenceFrequency,
+    RecurrenceRule,
+    occurs_on,
+    occurrences,
+)
 from .secrets import KeyringSecretStore, SecretStoreError
 from .storage import (
     AuditLog,
@@ -58,6 +65,9 @@ __all__ = [
     "LegacySessionImporter",
     "Note",
     "Project",
+    "RecurrenceError",
+    "RecurrenceFrequency",
+    "RecurrenceRule",
     "RedactingJSONFormatter",
     "RiskLevel",
     "SecretStoreError",
@@ -66,5 +76,7 @@ __all__ = [
     "TaskStatus",
     "configure_logging",
     "load_settings",
+    "occurs_on",
+    "occurrences",
     "redact_text",
 ]

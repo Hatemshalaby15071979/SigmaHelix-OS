@@ -159,14 +159,14 @@ gates:
     tasks:
       - id: P2-001
         title: Recurrence engine for daily, weekly, monthly, weekdays, and every-N rules
-        status: in_progress
+        status: done
         depends_on: [P1-001]
         acceptance:
           - "Property tests over 10k generated rules"
         evidence: docs/execution/evidence/P2-001.md
       - id: P2-002
         title: Occurrence materialization and completion semantics
-        status: ready
+        status: in_progress
         depends_on: [P2-001]
         acceptance:
           - "Completing one occurrence does not kill the series"
