@@ -124,6 +124,26 @@ _REQUIRED_TABLES = {
         "missed_job_runs",
         "notifications",
     },
+    9: {
+        "projects",
+        "tasks",
+        "notes",
+        "events",
+        "approvals",
+        "evidence",
+        "evidence_tags",
+        "audit_log",
+        "event_stream",
+        "legacy_imports",
+        "task_series",
+        "task_occurrences",
+        "scheduled_jobs",
+        "job_runs",
+        "missed_job_runs",
+        "notifications",
+        "notification_alarm_states",
+        "notification_actions",
+    },
 }
 
 

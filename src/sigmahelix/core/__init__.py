@@ -25,6 +25,10 @@ from .recurrence import (
 )
 from .secrets import KeyringSecretStore, SecretStoreError
 from .storage import (
+    AlarmAction,
+    AlarmError,
+    AlarmService,
+    AlarmState,
     AuditLog,
     AuditLogEntry,
     AuditLogError,
@@ -55,6 +59,10 @@ from .storage import (
 __all__ = [
     "Approval",
     "ApprovalStatus",
+    "AlarmAction",
+    "AlarmError",
+    "AlarmService",
+    "AlarmState",
     "AuditLog",
     "AuditLogEntry",
     "AuditLogError",

@@ -350,6 +350,80 @@ DROP TABLE IF EXISTS notifications;
 """,
         rollback_requires_empty=("notifications",),
     ),
+    Migration(
+        version=9,
+        name="notification_alarm_state_v9",
+        up_sql="""
+CREATE TABLE notification_alarm_states (
+    notification_id TEXT NOT NULL,
+    tenant_id TEXT NOT NULL CHECK(length(trim(tenant_id)) > 0),
+    state TEXT NOT NULL CHECK(state IN ('pending', 'snoozed', 'rescheduled', 'dismissed')),
+    due_at TEXT,
+    scheduled_job_id TEXT,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (notification_id),
+    UNIQUE (tenant_id, notification_id),
+    FOREIGN KEY (tenant_id, notification_id) REFERENCES notifications(tenant_id, id) ON DELETE RESTRICT,
+    FOREIGN KEY (tenant_id, scheduled_job_id) REFERENCES scheduled_jobs(tenant_id, id) ON DELETE RESTRICT,
+    CHECK ((state IN ('snoozed', 'rescheduled') AND due_at IS NOT NULL AND scheduled_job_id IS NOT NULL)
+        OR (state IN ('pending', 'dismissed') AND due_at IS NULL AND scheduled_job_id IS NULL))
+);
+CREATE UNIQUE INDEX idx_notifications_tenant_id ON notifications(tenant_id, id);
+CREATE TABLE notification_actions (
+    id TEXT NOT NULL PRIMARY KEY,
+    tenant_id TEXT NOT NULL,
+    notification_id TEXT NOT NULL,
+    action TEXT NOT NULL CHECK(action IN ('snooze', 'dismiss', 'reschedule')),
+    from_state TEXT NOT NULL,
+    to_state TEXT NOT NULL,
+    due_at TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (tenant_id, notification_id) REFERENCES notifications(tenant_id, id) ON DELETE RESTRICT
+);
+CREATE INDEX idx_notification_actions_history
+    ON notification_actions(tenant_id, notification_id, created_at, id);
+INSERT INTO notification_alarm_states
+    (notification_id, tenant_id, state, due_at, scheduled_job_id, updated_at)
+    SELECT id, tenant_id, 'pending', NULL, NULL, created_at FROM notifications;
+CREATE TRIGGER notification_alarm_state_transition
+BEFORE UPDATE ON notification_alarm_states
+WHEN OLD.state = 'dismissed'
+  OR (OLD.state = 'pending' AND NEW.state NOT IN ('snoozed', 'rescheduled', 'dismissed'))
+  OR (OLD.state IN ('snoozed', 'rescheduled') AND NEW.state NOT IN ('snoozed', 'rescheduled', 'dismissed'))
+  OR NEW.notification_id != OLD.notification_id
+  OR NEW.tenant_id != OLD.tenant_id
+  OR NEW.updated_at < OLD.updated_at
+  OR (NEW.state = OLD.state AND NEW.updated_at = OLD.updated_at)
+  OR NEW.state NOT IN ('pending', 'snoozed', 'rescheduled', 'dismissed')
+  OR (NEW.state IN ('snoozed', 'rescheduled') AND (NEW.due_at IS NULL OR NEW.scheduled_job_id IS NULL))
+  OR (NEW.state IN ('pending', 'dismissed') AND (NEW.due_at IS NOT NULL OR NEW.scheduled_job_id IS NOT NULL))
+BEGIN
+    SELECT RAISE(ABORT, 'notification alarm transition is invalid');
+END;
+CREATE TRIGGER notification_actions_no_update
+BEFORE UPDATE ON notification_actions BEGIN
+    SELECT RAISE(ABORT, 'notification actions are append-only');
+END;
+CREATE TRIGGER notification_actions_no_delete
+BEFORE DELETE ON notification_actions BEGIN
+    SELECT RAISE(ABORT, 'notification actions are append-only');
+END;
+CREATE TRIGGER notification_alarm_states_no_delete
+BEFORE DELETE ON notification_alarm_states BEGIN
+    SELECT RAISE(ABORT, 'notification alarm states are retained');
+END;
+""",
+        down_sql="""
+DROP TRIGGER IF EXISTS notification_alarm_states_no_delete;
+DROP TRIGGER IF EXISTS notification_actions_no_delete;
+DROP TRIGGER IF EXISTS notification_actions_no_update;
+DROP TRIGGER IF EXISTS notification_alarm_state_transition;
+DROP TABLE IF EXISTS notification_actions;
+DROP TABLE IF EXISTS notification_alarm_states;
+DROP INDEX IF EXISTS idx_notifications_tenant_id;
+""",
+        rollback_requires_empty=("notification_actions", "notification_alarm_states"),
+    ),
 )
 
 

@@ -194,14 +194,14 @@ gates:
         evidence: docs/execution/evidence/P2-005.md
       - id: P2-006
         title: Snooze, dismiss, and reschedule state machine
-        status: in_progress
+        status: done
         depends_on: [P2-002, P2-003]
         acceptance:
           - "State machine tests"
         evidence: docs/execution/evidence/P2-006.md
       - id: P2-007
         title: Project scanner for git state, manifests, entrypoints, and health
-        status: ready
+        status: in_progress
         depends_on: [P1-002]
         acceptance:
           - "12 repos scanned in under 2 seconds"

@@ -131,6 +131,13 @@ class NotificationService:
                 "SELECT * FROM notifications WHERE tenant_id = ? AND dedupe_key = ?",
                 (tenant_id, key),
             ).fetchone()
+            if cursor.rowcount == 1:
+                connection.execute(
+                    "INSERT INTO notification_alarm_states "
+                    "(notification_id, tenant_id, state, due_at, scheduled_job_id, updated_at) "
+                    "VALUES (?, ?, 'pending', NULL, NULL, ?)",
+                    (str(identifier), tenant_id, now.isoformat()),
+                )
         if row is None:
             raise NotificationError("notification was not persisted")
         if cursor.rowcount != 1:
