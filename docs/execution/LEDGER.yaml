@@ -155,7 +155,7 @@ gates:
         evidence: docs/execution/evidence/P1-010.md
   - id: P2
     name: Time and projects
-    status: in_progress
+    status: done
     tasks:
       - id: P2-001
         title: Recurrence engine for daily, weekly, monthly, weekdays, and every-N rules
