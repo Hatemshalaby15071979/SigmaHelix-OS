@@ -1,4 +1,4 @@
-# Durable core schema v2
+# Durable core schema v4
 
 ```mermaid
 erDiagram
@@ -93,8 +93,15 @@ erDiagram
         text event_id FK
         text tenant_id
     }
+    LEGACY_IMPORTS {
+        text source_id PK
+        text snapshot_sha256
+        text imported_at
+        integer task_count
+        integer note_count
+    }
 ```
 
 `id` is a UUID primary key. Project relationships use composite foreign keys on `(tenant_id, project_id)` to reject cross-tenant links. Tasks, notes, and projects are soft-deleted; event, evidence, and evidence-tag rows are append-only at both repository and SQLite-trigger boundaries. Approval rows retain their state transitions in place, with decision metadata and expiry constraints.
 
-Evidence tags are normalized into `evidence_tags`; the `evidence_records` view assembles them for typed reads. Schema v2 adds the globally sequenced, tenant-labelled audit chain; its entity reference is intentionally polymorphic and is not a foreign key. Schema v3 adds `event_stream`, whose sequence cursor references each immutable event. The generated diagram is based on schema analyzer output, with the tenant-scoped composite foreign-key labels retained from the actual DDL.
+Evidence tags are normalized into `evidence_tags`; the `evidence_records` view assembles them for typed reads. Schema v2 adds the globally sequenced, tenant-labelled audit chain; its entity reference is intentionally polymorphic and is not a foreign key. Schema v3 adds `event_stream`, whose sequence cursor references each immutable event. Schema v4 adds the append-only import ledger that makes legacy in-memory snapshot import idempotent. The generated diagram is based on schema analyzer output, with the tenant-scoped composite foreign-key labels retained from the actual DDL.

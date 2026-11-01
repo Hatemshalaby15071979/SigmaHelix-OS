@@ -127,6 +127,33 @@ DROP TRIGGER IF EXISTS event_stream_no_update;
 DROP TABLE IF EXISTS event_stream;
 """,
     ),
+    Migration(
+        version=4,
+        name="legacy_session_import_ledger_v4",
+        up_sql="""
+CREATE TABLE legacy_imports (
+    source_id TEXT PRIMARY KEY CHECK(length(trim(source_id)) > 0),
+    snapshot_sha256 TEXT NOT NULL CHECK(length(snapshot_sha256) = 64 AND snapshot_sha256 NOT GLOB '*[^0-9a-f]*'),
+    imported_at TEXT NOT NULL,
+    task_count INTEGER NOT NULL CHECK(task_count >= 0),
+    note_count INTEGER NOT NULL CHECK(note_count >= 0)
+);
+CREATE TRIGGER legacy_imports_no_update
+BEFORE UPDATE ON legacy_imports BEGIN
+    SELECT RAISE(ABORT, 'legacy import ledger is append-only');
+END;
+CREATE TRIGGER legacy_imports_no_delete
+BEFORE DELETE ON legacy_imports BEGIN
+    SELECT RAISE(ABORT, 'legacy import ledger is append-only');
+END;
+""",
+        down_sql="""
+DROP TRIGGER IF EXISTS legacy_imports_no_delete;
+DROP TRIGGER IF EXISTS legacy_imports_no_update;
+DROP TABLE IF EXISTS legacy_imports;
+""",
+        rollback_requires_empty=("legacy_imports",),
+    ),
 )
 
 

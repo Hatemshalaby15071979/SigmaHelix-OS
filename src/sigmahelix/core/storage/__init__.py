@@ -4,6 +4,12 @@ from .audit import AuditLog, AuditLogEntry, AuditLogError, AuditVerification
 from .backup import BackupError, BackupManifest, DatabaseBackup
 from .database import Database
 from .event_bus import EventBus, EventBusError, EventDispatchError, EventEnvelope
+from .legacy_import import (
+    LegacyImportConflict,
+    LegacyImportError,
+    LegacyImportResult,
+    LegacySessionImporter,
+)
 from .migrations import (
     Migration,
     MigrationDataLossError,
@@ -39,6 +45,10 @@ __all__ = [
     "MigrationDataLossError",
     "MigrationError",
     "MigrationRunner",
+    "LegacyImportConflict",
+    "LegacyImportError",
+    "LegacyImportResult",
+    "LegacySessionImporter",
     "EventRepository",
     "NoteRepository",
     "ProjectRepository",

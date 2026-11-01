@@ -47,6 +47,18 @@ _REQUIRED_TABLES = {
         "audit_log",
         "event_stream",
     },
+    4: {
+        "projects",
+        "tasks",
+        "notes",
+        "events",
+        "approvals",
+        "evidence",
+        "evidence_tags",
+        "audit_log",
+        "event_stream",
+        "legacy_imports",
+    },
 }
 
 

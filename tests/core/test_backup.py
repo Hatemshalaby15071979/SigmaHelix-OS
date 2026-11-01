@@ -36,7 +36,7 @@ def test_export_and_restore_round_trip_byte_identically(tmp_path):
     assert manifest == restored_manifest
     assert manifest.size_bytes == backup_path.stat().st_size
     assert manifest.database_sha256 == _digest(backup_path) == _digest(restored_path)
-    assert manifest.schema_version == 3
+    assert manifest.schema_version == 4
     assert restored_path.stat().st_mode & 0o777 == 0o600
     assert DatabaseBackup.manifest_path(backup_path).stat().st_mode & 0o777 == 0o600
 
@@ -102,7 +102,7 @@ def test_restore_rejects_a_checksum_valid_non_database(tmp_path):
                 "created_at": "2026-11-02T00:00:00+00:00",
                 "database_sha256": _digest(backup),
                 "size_bytes": backup.stat().st_size,
-                "schema_version": 3,
+                "schema_version": 4,
             }
         ),
         encoding="utf-8",
@@ -116,7 +116,7 @@ def test_restore_rejects_database_with_unknown_sigmahelix_schema(tmp_path):
     backup = tmp_path / "broken.db"
     connection = sqlite3.connect(backup)
     connection.execute("CREATE TABLE sample (id INTEGER PRIMARY KEY)")
-    connection.execute("PRAGMA user_version = 3")
+    connection.execute("PRAGMA user_version = 4")
     connection.commit()
     connection.close()
     DatabaseBackup.manifest_path(backup).write_text(
@@ -126,7 +126,7 @@ def test_restore_rejects_database_with_unknown_sigmahelix_schema(tmp_path):
                 "created_at": "2026-11-02T00:00:00+00:00",
                 "database_sha256": _digest(backup),
                 "size_bytes": backup.stat().st_size,
-                "schema_version": 3,
+                "schema_version": 4,
             }
         ),
         encoding="utf-8",

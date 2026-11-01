@@ -27,6 +27,10 @@ from .storage import (
     EventBusError,
     EventDispatchError,
     EventEnvelope,
+    LegacyImportConflict,
+    LegacyImportError,
+    LegacyImportResult,
+    LegacySessionImporter,
 )
 
 __all__ = [
@@ -48,6 +52,10 @@ __all__ = [
     "EventEnvelope",
     "Evidence",
     "KeyringSecretStore",
+    "LegacyImportConflict",
+    "LegacyImportError",
+    "LegacyImportResult",
+    "LegacySessionImporter",
     "Note",
     "Project",
     "RedactingJSONFormatter",
