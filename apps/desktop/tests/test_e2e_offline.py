@@ -180,6 +180,7 @@ def test_agent_empty_input(offline_agent):
 def test_voice_lazy_init_no_mic_crash(offline_agent):
     engine = offline_agent.voice_engine  # must not raise even without mic
     assert engine is not None
+    engine.speak_text = lambda *_args: True
     stub = offline_agent.process_command("say hello from test")
     assert "hello from test" in stub
 

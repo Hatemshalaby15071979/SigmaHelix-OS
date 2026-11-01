@@ -4,11 +4,20 @@ SigmaHelix is a local-first personal operating system and career command centre.
 
 ## Current status
 
-Execution is in P0 (truth and safety net). No release or production-readiness claim is made. See `docs/execution/LEDGER.yaml` and `docs/execution/RUNLOG.md` as they are added.
+P0 (truth and safety net) is complete; execution has started P1 (durable core). No release or production-readiness claim is made. See `docs/execution/LEDGER.yaml` for task state and `docs/execution/RUNLOG.md` for session evidence.
 
 ## Source documents
 
 The approved plan and Tommy runtime specification are maintained in `docs/governance/`.
+
+## Install dependencies
+
+The current lock targets Linux x86_64 with Python 3.12:
+
+```sh
+python3.12 -m venv .venv
+.venv/bin/python -m pip install --require-hashes -r requirements.lock
+```
 
 ## Local commands
 

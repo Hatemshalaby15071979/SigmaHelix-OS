@@ -3,7 +3,7 @@ project: sigmahelix
 gates:
   - id: P0
     name: Truth and safety net
-    status: in_progress
+    status: done
     tasks:
       - id: P0-001
         title: Backup workspace to second physical disk with checksum manifest
@@ -73,9 +73,83 @@ gates:
         evidence: docs/execution/evidence/P0-009.md
       - id: P0-010
         title: Dependency pinning and hash lockfile
-        status: ready
+        status: done
         depends_on: [P0-009]
         acceptance:
           - "pip install --require-hashes succeeds in a clean venv"
         evidence: docs/execution/evidence/P0-010.md
         risk: R1
+  - id: P1
+    name: Durable core
+    status: in_progress
+    tasks:
+      - id: P1-001
+        title: Domain models for task, note, project, event, approval, and evidence
+        status: in_progress
+        depends_on: []
+        acceptance:
+          - "Schema validation tests"
+        evidence: docs/execution/evidence/P1-001.md
+      - id: P1-002
+        title: SQLite connection, WAL pragmas, and repositories
+        status: ready
+        depends_on: [P1-001]
+        acceptance:
+          - "CRUD round-trip; concurrent read test"
+        evidence: docs/execution/evidence/P1-002.md
+      - id: P1-003
+        title: Migration runner v0 to v1 with rollback
+        status: blocked
+        depends_on: [P1-002]
+        acceptance:
+          - "Forward + rollback tests"
+        evidence: docs/execution/evidence/P1-003.md
+      - id: P1-004
+        title: Config layer with YAML, environment, and keyring
+        status: blocked
+        depends_on: [P1-001]
+        acceptance:
+          - "No hardcoded paths; precedence tests"
+        evidence: docs/execution/evidence/P1-004.md
+      - id: P1-005
+        title: Structured logging and redaction
+        status: blocked
+        depends_on: [P1-004]
+        acceptance:
+          - "Secret-pattern test yields zero leaks"
+        evidence: docs/execution/evidence/P1-005.md
+      - id: P1-006
+        title: Hash-chained audit log
+        status: blocked
+        depends_on: [P1-002]
+        acceptance:
+          - "1,000-event chain verifies; tamper detected"
+        evidence: docs/execution/evidence/P1-006.md
+      - id: P1-007
+        title: Event bus with persistence
+        status: blocked
+        depends_on: [P1-002, P1-006]
+        acceptance:
+          - "Publish/subscribe; replay test"
+        evidence: docs/execution/evidence/P1-007.md
+      - id: P1-008
+        title: Backup, export, and restore commands
+        status: blocked
+        depends_on: [P1-002, P1-003]
+        acceptance:
+          - "Round-trip byte-identical"
+        evidence: docs/execution/evidence/P1-008.md
+      - id: P1-009
+        title: Crash-safety test during write
+        status: blocked
+        depends_on: [P1-002]
+        acceptance:
+          - "WAL recovery; no corruption"
+        evidence: docs/execution/evidence/P1-009.md
+      - id: P1-010
+        title: Import legacy in-memory session when available
+        status: blocked
+        depends_on: [P1-001, P1-002]
+        acceptance:
+          - "Idempotent importer test"
+        evidence: docs/execution/evidence/P1-010.md

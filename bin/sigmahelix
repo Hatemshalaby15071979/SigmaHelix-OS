@@ -8,6 +8,16 @@ if [[ "${1:-}" == "--version" || "${1:-}" == "-V" ]]; then
 fi
 if [[ "${1:-}" == "--cli" ]]; then
   shift
-  exec python3 "$repo_root/apps/desktop/console_os.py" "$@"
+  python_bin="$repo_root/.venv/bin/python"
+  if [[ ! -x "$python_bin" ]]; then
+    echo "Create the local environment with: python3.12 -m venv .venv" >&2
+    exit 2
+  fi
+  exec "$python_bin" "$repo_root/apps/desktop/console_os.py" "$@"
 fi
-exec python3 "$repo_root/apps/desktop/main.py" "$@"
+python_bin="$repo_root/.venv/bin/python"
+if [[ ! -x "$python_bin" ]]; then
+  echo "Create the local environment with: python3.12 -m venv .venv" >&2
+  exit 2
+fi
+exec "$python_bin" "$repo_root/apps/desktop/main.py" "$@"
