@@ -173,14 +173,14 @@ gates:
         evidence: docs/execution/evidence/P2-002.md
       - id: P2-003
         title: Scheduler with persisted jobs and fake clock
-        status: in_progress
+        status: done
         depends_on: [P2-002]
         acceptance:
           - "Fires within 2 seconds in test; no duplicates"
         evidence: docs/execution/evidence/P2-003.md
       - id: P2-004
         title: Missed-run recovery on startup
-        status: ready
+        status: in_progress
         depends_on: [P2-003]
         acceptance:
           - "Missed alarms surfaced, never silently dropped"

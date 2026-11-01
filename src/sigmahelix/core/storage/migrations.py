@@ -205,6 +205,64 @@ DROP TABLE IF EXISTS task_series;
 """,
         rollback_requires_empty=("task_occurrences", "task_series"),
     ),
+    Migration(
+        version=6,
+        name="persisted_scheduler_jobs_v6",
+        up_sql="""
+CREATE TABLE scheduled_jobs (
+    id TEXT NOT NULL,
+    tenant_id TEXT NOT NULL CHECK(length(trim(tenant_id)) > 0),
+    job_type TEXT NOT NULL CHECK(length(trim(job_type)) > 0),
+    payload_json TEXT NOT NULL CHECK(json_valid(payload_json)),
+    next_run_at TEXT NOT NULL,
+    interval_seconds INTEGER CHECK(interval_seconds IS NULL OR interval_seconds > 0),
+    enabled INTEGER NOT NULL CHECK(enabled IN (0, 1)),
+    created_at TEXT NOT NULL,
+    last_run_at TEXT,
+    PRIMARY KEY (id),
+    UNIQUE (tenant_id, id)
+);
+CREATE INDEX idx_scheduled_jobs_due
+    ON scheduled_jobs(enabled, next_run_at, tenant_id);
+CREATE TABLE job_runs (
+    id TEXT NOT NULL PRIMARY KEY,
+    tenant_id TEXT NOT NULL CHECK(length(trim(tenant_id)) > 0),
+    job_id TEXT NOT NULL,
+    scheduled_for TEXT NOT NULL,
+    started_at TEXT NOT NULL,
+    finished_at TEXT,
+    status TEXT NOT NULL CHECK(status IN ('running', 'succeeded', 'failed')),
+    error_type TEXT,
+    UNIQUE (tenant_id, job_id, scheduled_for),
+    FOREIGN KEY (tenant_id, job_id) REFERENCES scheduled_jobs(tenant_id, id) ON DELETE RESTRICT
+);
+CREATE INDEX idx_job_runs_tenant_status
+    ON job_runs(tenant_id, status, started_at);
+CREATE TRIGGER job_runs_update_transition
+BEFORE UPDATE ON job_runs
+WHEN OLD.status != 'running'
+  OR NEW.status NOT IN ('succeeded', 'failed')
+  OR NEW.id != OLD.id
+  OR NEW.tenant_id != OLD.tenant_id
+  OR NEW.job_id != OLD.job_id
+  OR NEW.scheduled_for != OLD.scheduled_for
+  OR NEW.started_at != OLD.started_at
+BEGIN
+    SELECT RAISE(ABORT, 'job run transition is invalid');
+END;
+CREATE TRIGGER job_runs_no_delete
+BEFORE DELETE ON job_runs BEGIN
+    SELECT RAISE(ABORT, 'job runs are append-only');
+END;
+""",
+        down_sql="""
+DROP TRIGGER IF EXISTS job_runs_no_delete;
+DROP TRIGGER IF EXISTS job_runs_update_transition;
+DROP TABLE IF EXISTS job_runs;
+DROP TABLE IF EXISTS scheduled_jobs;
+""",
+        rollback_requires_empty=("job_runs", "scheduled_jobs"),
+    ),
 )
 
 

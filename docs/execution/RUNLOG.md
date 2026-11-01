@@ -32,3 +32,4 @@
 - P2-002 (occurrence materialization and completion semantics) is now in progress.
 - Completed P2-002: schema v5 separates recurring task definitions from immutable date/task occurrence links. Materialization is deterministic, resumable, concurrent-safe, and atomic with its event/audit entry; completing one task leaves the series active. Full CI passed (95 core/ledger; 27 offline desktop tests).
 - P2-003 (persisted scheduler with fake clock) is now in progress.
+- Completed P2-003: schema v6 adds durable jobs and run claims; injected-clock scheduling, transactional per-slot claims, tenant isolation, payload secret rejection, handler results, events, and audit entries are covered. Focused storage/scheduler suite passed (27 tests); full CI passed formatting, lint, mypy, compile, 100 core/ledger tests, and 27 offline desktop tests. P2-004 missed-run recovery is now in progress.

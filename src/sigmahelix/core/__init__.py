@@ -40,8 +40,12 @@ from .storage import (
     LegacyImportError,
     LegacyImportResult,
     LegacySessionImporter,
+    JobRun,
     OccurrenceError,
     OccurrenceService,
+    ScheduledJob,
+    Scheduler,
+    SchedulerError,
 )
 
 __all__ = [
@@ -67,6 +71,7 @@ __all__ = [
     "LegacyImportError",
     "LegacyImportResult",
     "LegacySessionImporter",
+    "JobRun",
     "Note",
     "OccurrenceError",
     "OccurrenceService",
@@ -77,6 +82,9 @@ __all__ = [
     "RedactingJSONFormatter",
     "RiskLevel",
     "SecretStoreError",
+    "ScheduledJob",
+    "Scheduler",
+    "SchedulerError",
     "Settings",
     "Task",
     "TaskOccurrence",

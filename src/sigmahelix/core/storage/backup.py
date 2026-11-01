@@ -73,6 +73,22 @@ _REQUIRED_TABLES = {
         "task_series",
         "task_occurrences",
     },
+    6: {
+        "projects",
+        "tasks",
+        "notes",
+        "events",
+        "approvals",
+        "evidence",
+        "evidence_tags",
+        "audit_log",
+        "event_stream",
+        "legacy_imports",
+        "task_series",
+        "task_occurrences",
+        "scheduled_jobs",
+        "job_runs",
+    },
 }
 
 
