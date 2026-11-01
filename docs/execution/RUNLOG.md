@@ -18,3 +18,5 @@
 - P1-005 (structured logging and redaction) is now the next eligible task.
 - Completed P1-005: added local JSON-lines logging, seven-day UTC rotation, owner-only log permissions, and message/field/exception redaction. Clean CI passed (49 core/ledger tests; 27 offline desktop tests).
 - P1-006 (hash-chained audit log) is now in progress.
+- Completed P1-006: migration v2 adds a globally sequenced, tenant-labelled SHA-256 chain with atomic append support, append-only triggers, secret-like payload rejection, and full-chain verification. Clean CI passed (56 core/ledger tests; 27 offline desktop tests), including a 1,000-record chain and tamper detection.
+- P1-007 (persistent event bus) is now in progress; P1-008 (backup/export/restore) is unblocked and ready.

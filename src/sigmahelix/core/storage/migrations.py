@@ -61,6 +61,39 @@ CORE_MIGRATIONS = (
             "evidence_tags",
         ),
     ),
+    Migration(
+        version=2,
+        name="hash_chained_audit_log_v2",
+        up_sql="""
+CREATE TABLE audit_log (
+    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+    id TEXT NOT NULL UNIQUE,
+    tenant_id TEXT NOT NULL CHECK(length(trim(tenant_id)) > 0),
+    action TEXT NOT NULL CHECK(length(trim(action)) > 0),
+    entity_type TEXT NOT NULL CHECK(length(trim(entity_type)) > 0),
+    entity_id TEXT NOT NULL CHECK(length(trim(entity_id)) > 0),
+    occurred_at TEXT NOT NULL,
+    payload_json TEXT NOT NULL CHECK(json_valid(payload_json)),
+    previous_hash TEXT NOT NULL CHECK(length(previous_hash) = 64 AND previous_hash NOT GLOB '*[^0-9a-f]*'),
+    record_hash TEXT NOT NULL CHECK(length(record_hash) = 64 AND record_hash NOT GLOB '*[^0-9a-f]*')
+);
+CREATE INDEX idx_audit_log_tenant_sequence ON audit_log(tenant_id, sequence);
+CREATE TRIGGER audit_log_no_update
+BEFORE UPDATE ON audit_log BEGIN
+    SELECT RAISE(ABORT, 'audit log is append-only');
+END;
+CREATE TRIGGER audit_log_no_delete
+BEFORE DELETE ON audit_log BEGIN
+    SELECT RAISE(ABORT, 'audit log is append-only');
+END;
+""",
+        down_sql="""
+DROP TRIGGER IF EXISTS audit_log_no_delete;
+DROP TRIGGER IF EXISTS audit_log_no_update;
+DROP TABLE IF EXISTS audit_log;
+""",
+        rollback_requires_empty=("audit_log",),
+    ),
 )
 
 

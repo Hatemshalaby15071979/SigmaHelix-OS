@@ -1,5 +1,6 @@
 """SQLite persistence for the SigmaHelix durable core."""
 
+from .audit import AuditLog, AuditLogEntry, AuditLogError, AuditVerification
 from .database import Database
 from .migrations import (
     Migration,
@@ -19,6 +20,10 @@ from .repositories import (
 
 __all__ = [
     "ApprovalRepository",
+    "AuditLog",
+    "AuditLogEntry",
+    "AuditLogError",
+    "AuditVerification",
     "Database",
     "EvidenceRepository",
     "Migration",

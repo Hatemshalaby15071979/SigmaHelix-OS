@@ -35,14 +35,15 @@ def test_migration_runner_applies_v0_to_v1_and_rolls_back_empty_database(tmp_pat
     runner = MigrationRunner(database)
 
     assert runner.current_version() == 0
-    assert runner.upgrade() == 1
+    assert runner.upgrade() == 2
     assert ("table", "tasks") in _application_objects(database)
+    assert ("table", "audit_log") in _application_objects(database)
     assert ("view", "evidence_records") in _application_objects(database)
 
     assert runner.downgrade(0) == 0
     assert _application_objects(database) == set()
-    assert runner.upgrade() == 1
-    assert _version(database) == 1
+    assert runner.upgrade() == 2
+    assert _version(database) == 2
 
 
 def test_migration_runner_refuses_downgrade_when_it_would_drop_records(tmp_path):
@@ -85,7 +86,7 @@ def test_migration_runner_rejects_untracked_and_newer_schemas(tmp_path):
 
     newer = Database(tmp_path / "newer.db")
     with newer.connection() as connection:
-        connection.execute("PRAGMA user_version = 2")
+        connection.execute("PRAGMA user_version = 3")
     with pytest.raises(MigrationError, match="newer than supported"):
         MigrationRunner(newer).upgrade()
 
@@ -102,10 +103,11 @@ def test_upgrade_and_downgrade_targets_cannot_move_in_the_wrong_direction(tmp_pa
         migrations=(
             Migration(1, "v1", "", ""),
             Migration(2, "v2", "", ""),
+            Migration(3, "v3", "", ""),
         ),
     )
     with pytest.raises(MigrationError, match="above the current version"):
-        extended_runner.downgrade(target_version=2)
+        extended_runner.downgrade(target_version=3)
 
 
 def test_migration_versions_must_be_contiguous(tmp_path):
@@ -114,3 +116,16 @@ def test_migration_versions_must_be_contiguous(tmp_path):
 
     with pytest.raises(ValueError, match="contiguous"):
         MigrationRunner(database, migrations=(migration,))
+
+
+def test_migration_runner_refuses_to_remove_a_populated_audit_log(tmp_path):
+    from sigmahelix.core.storage import AuditLog
+
+    database = Database(tmp_path / "audit-migration.db")
+    database.initialize()
+    AuditLog(database).append("task.created", "task", "task-1", {"ok": True})
+
+    with pytest.raises(MigrationDataLossError, match="audit_log contains records"):
+        MigrationRunner(database).downgrade(1)
+
+    assert MigrationRunner(database).current_version() == 2

@@ -120,21 +120,21 @@ gates:
         evidence: docs/execution/evidence/P1-005.md
       - id: P1-006
         title: Hash-chained audit log
-        status: in_progress
+        status: done
         depends_on: [P1-002]
         acceptance:
           - "1,000-event chain verifies; tamper detected"
         evidence: docs/execution/evidence/P1-006.md
       - id: P1-007
         title: Event bus with persistence
-        status: blocked
+        status: in_progress
         depends_on: [P1-002, P1-006]
         acceptance:
           - "Publish/subscribe; replay test"
         evidence: docs/execution/evidence/P1-007.md
       - id: P1-008
         title: Backup, export, and restore commands
-        status: blocked
+        status: ready
         depends_on: [P1-002, P1-003]
         acceptance:
           - "Round-trip byte-identical"
