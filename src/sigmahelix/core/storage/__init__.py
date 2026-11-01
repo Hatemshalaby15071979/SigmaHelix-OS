@@ -18,6 +18,12 @@ from .migrations import (
     MigrationRunner,
 )
 from .notifications import Notification, NotificationError, NotificationService
+from .project_scanner import (
+    ProjectScan,
+    ProjectScanBatch,
+    ProjectScanError,
+    ProjectScanner,
+)
 from .occurrences import OccurrenceError, OccurrenceService
 from .scheduler import JobRun, MissedJobRun, ScheduledJob, Scheduler, SchedulerError
 from .repositories import (
@@ -67,6 +73,10 @@ __all__ = [
     "OccurrenceError",
     "OccurrenceService",
     "ProjectRepository",
+    "ProjectScan",
+    "ProjectScanBatch",
+    "ProjectScanError",
+    "ProjectScanner",
     "RepositoryOperationError",
     "ScheduledJob",
     "Scheduler",

@@ -424,6 +424,44 @@ DROP INDEX IF EXISTS idx_notifications_tenant_id;
 """,
         rollback_requires_empty=("notification_actions", "notification_alarm_states"),
     ),
+    Migration(
+        version=10,
+        name="project_scan_snapshots_v10",
+        up_sql="""
+CREATE TABLE project_scan_snapshots (
+    id TEXT NOT NULL PRIMARY KEY,
+    tenant_id TEXT NOT NULL CHECK(length(trim(tenant_id)) > 0),
+    project_id TEXT NOT NULL,
+    scanned_at TEXT NOT NULL,
+    git_branch TEXT,
+    git_commit TEXT,
+    git_dirty INTEGER CHECK(git_dirty IS NULL OR git_dirty IN (0, 1)),
+    git_change_count INTEGER NOT NULL CHECK(git_change_count >= 0),
+    manifests_json TEXT NOT NULL CHECK(json_valid(manifests_json)),
+    entrypoints_json TEXT NOT NULL CHECK(json_valid(entrypoints_json)),
+    findings_json TEXT NOT NULL CHECK(json_valid(findings_json)),
+    health TEXT NOT NULL CHECK(health IN ('ok', 'needs_attention', 'unavailable')),
+    UNIQUE (tenant_id, id),
+    FOREIGN KEY (tenant_id, project_id) REFERENCES projects(tenant_id, id) ON DELETE RESTRICT
+);
+CREATE INDEX idx_project_scans_latest
+    ON project_scan_snapshots(tenant_id, project_id, scanned_at DESC, id);
+CREATE TRIGGER project_scan_snapshots_no_update
+BEFORE UPDATE ON project_scan_snapshots BEGIN
+    SELECT RAISE(ABORT, 'project scan snapshots are append-only');
+END;
+CREATE TRIGGER project_scan_snapshots_no_delete
+BEFORE DELETE ON project_scan_snapshots BEGIN
+    SELECT RAISE(ABORT, 'project scan snapshots are append-only');
+END;
+""",
+        down_sql="""
+DROP TRIGGER IF EXISTS project_scan_snapshots_no_delete;
+DROP TRIGGER IF EXISTS project_scan_snapshots_no_update;
+DROP TABLE IF EXISTS project_scan_snapshots;
+""",
+        rollback_requires_empty=("project_scan_snapshots",),
+    ),
 )
 
 

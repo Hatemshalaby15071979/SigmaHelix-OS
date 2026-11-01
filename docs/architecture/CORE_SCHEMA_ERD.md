@@ -1,4 +1,4 @@
-# Durable core schema v9
+# Durable core schema v10
 
 ```mermaid
 erDiagram
@@ -184,8 +184,23 @@ erDiagram
         text due_at
         text created_at
     }
+    PROJECTS ||--o{ PROJECT_SCAN_SNAPSHOTS : "records scans"
+    PROJECT_SCAN_SNAPSHOTS {
+        text id PK
+        text tenant_id
+        text project_id FK
+        text scanned_at
+        text git_branch
+        text git_commit
+        integer git_dirty
+        integer git_change_count
+        text manifests_json
+        text entrypoints_json
+        text findings_json
+        text health
+    }
 ```
 
 `id` is a UUID primary key. Project relationships use composite foreign keys on `(tenant_id, project_id)` to reject cross-tenant links. Tasks, notes, and projects are soft-deleted; event, evidence, and evidence-tag rows are append-only at both repository and SQLite-trigger boundaries. Approval rows retain their state transitions in place, with decision metadata and expiry constraints.
 
-Evidence tags are normalized into `evidence_tags`; the `evidence_records` view assembles them for typed reads. Schema v2 adds the globally sequenced, tenant-labelled audit chain; its entity reference is intentionally polymorphic and is not a foreign key. Schema v3 adds `event_stream`, whose sequence cursor references each immutable event. Schema v4 adds the append-only import ledger that makes legacy in-memory snapshot import idempotent. Schema v5 stores recurrence definitions separately from immutable series/date occurrence links to materialized tasks; task completion mutates the task and does not mutate the series or occurrence link. Schema v6 adds durable scheduled jobs and run claims. Schema v7 adds the append-only missed-run recovery history with a one-way pending-to-acknowledged transition. Schema v8 adds a deduplicated in-app notification inbox and delivery status. Schema v9 adds alarm state and immutable snooze/dismiss/reschedule action history. All links are tenant scoped. The generated diagram is based on schema analyzer output, with the tenant-scoped composite foreign-key labels retained from the actual DDL.
+Evidence tags are normalized into `evidence_tags`; the `evidence_records` view assembles them for typed reads. Schema v2 adds the globally sequenced, tenant-labelled audit chain; its entity reference is intentionally polymorphic and is not a foreign key. Schema v3 adds `event_stream`, whose sequence cursor references each immutable event. Schema v4 adds the append-only import ledger that makes legacy in-memory snapshot import idempotent. Schema v5 stores recurrence definitions separately from immutable series/date occurrence links to materialized tasks; task completion mutates the task and does not mutate the series or occurrence link. Schema v6 adds durable scheduled jobs and run claims. Schema v7 adds the append-only missed-run recovery history with a one-way pending-to-acknowledged transition. Schema v8 adds a deduplicated in-app notification inbox and delivery status. Schema v9 adds alarm state and immutable snooze/dismiss/reschedule action history. Schema v10 stores append-only project scan snapshots and advances the project's last-scan timestamp. All links are tenant scoped. The generated diagram is based on schema analyzer output, with the tenant-scoped composite foreign-key labels retained from the actual DDL.

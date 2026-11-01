@@ -201,14 +201,14 @@ gates:
         evidence: docs/execution/evidence/P2-006.md
       - id: P2-007
         title: Project scanner for git state, manifests, entrypoints, and health
-        status: in_progress
+        status: done
         depends_on: [P1-002]
         acceptance:
           - "12 repos scanned in under 2 seconds"
         evidence: docs/execution/evidence/P2-007.md
       - id: P2-008
         title: Watch mode with debounce and rescan
-        status: ready
+        status: in_progress
         depends_on: [P2-007]
         acceptance:
           - "New repo detected within 5 seconds"
