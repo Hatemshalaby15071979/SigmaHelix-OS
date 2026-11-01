@@ -8,6 +8,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import agent as agent_mod
 from agent import Agent
 from tasks import TasksManager, NotesManager, ProjectsManager, CalendarManager, LauncherManager
+import voice as voice_mod
+from local_endpoints import is_loopback_url
 
 import pytest
 
@@ -17,6 +19,22 @@ EXPECTED_REPOS = [
     "Study-Studio", "cx-sentiment-sentinel", "live-support-assistant",
     "wfm-forecasting-calculator", "work-samples",
 ]
+
+
+@pytest.mark.parametrize("endpoint", [
+    "http://localhost:11435", "http://127.0.0.1:11435", "https://[::1]:11435",
+])
+def test_local_endpoint_accepts_loopback(endpoint):
+    assert is_loopback_url(endpoint)
+
+
+@pytest.mark.parametrize("endpoint", [
+    "https://example.com", "http://192.168.1.8:11435",
+    "http://localhost.attacker.invalid", "http://localhost@evil.invalid",
+    "file:///tmp/model",
+])
+def test_local_endpoint_rejects_non_loopback_or_ambiguous_url(endpoint):
+    assert not is_loopback_url(endpoint)
 
 
 @pytest.fixture
@@ -134,6 +152,21 @@ def test_voice_lazy_init_no_mic_crash(offline_agent):
     assert engine is not None
     stub = offline_agent.process_command("say hello from test")
     assert "hello from test" in stub
+
+
+def test_voice_input_stays_local_without_offline_transcriber(offline_agent, monkeypatch):
+    engine = offline_agent.voice_engine
+    mic_calls = []
+    google_calls = []
+    monkeypatch.setattr(voice_mod.sr, "Microphone", lambda: mic_calls.append(True))
+    monkeypatch.setattr(engine.recognizer, "recognize_google",
+                        lambda audio: google_calls.append(audio) or "unexpected")
+
+    assert engine.mic_available is False
+    assert engine.record_phrase() is None
+    assert "not configured" in offline_agent.process_command("mic").lower()
+    assert mic_calls == []
+    assert google_calls == []
 
 
 # ---------------- launcher (no subprocess run; verify path guards) ----------------

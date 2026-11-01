@@ -156,6 +156,9 @@ class SigmaHelixApp:
             self.mic_btn.configure(text="🎙️")
             self.status.configure(text="mic stopped")
         else:
+            if not eng.mic_available:
+                self.status.configure(text="Offline speech-to-text is not configured; audio stays local.")
+                return
             self.mic_btn.configure(text="⏹")
             self.status.configure(text="listening… speak now")
             threading.Thread(target=self._listen_worker, daemon=True).start()
@@ -163,10 +166,8 @@ class SigmaHelixApp:
     def _listen_worker(self):
         eng = self.agent.voice_engine
         try:
-            with eng.mic as source:
-                eng.recognizer.adjust_for_ambient_noise(source, duration=0.6)
-                audio = eng.recognizer.listen(source, timeout=8, phrase_time_limit=15)
-            text = eng.recognizer.recognize_google(audio)
+            text = eng.record_phrase(timeout=8, phrase_limit=15)
+            err = None if text else "offline speech recognition returned no text"
         except Exception as e:
             text = None
             err = f"mic error: {e}"

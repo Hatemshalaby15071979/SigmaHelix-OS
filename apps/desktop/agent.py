@@ -18,10 +18,15 @@ import threading
 import urllib.error
 import urllib.request
 
+from local_endpoints import is_loopback_url
 from tasks import TasksManager, NotesManager, ProjectsManager, CalendarManager, LauncherManager
 from voice import VoiceEngine
 
-OLLAMA_HOSTS = [h for h in (os.environ.get("OLLAMA_HOSTS", "http://localhost:11435,http://localhost:11434")).split(",") if h]
+_configured_ollama_hosts = (os.environ.get(
+    "OLLAMA_HOSTS", "http://localhost:11435,http://localhost:11434")).split(",")
+OLLAMA_HOSTS = [host.strip().rstrip("/") for host in _configured_ollama_hosts
+                if is_loopback_url(host)]
+DEFAULT_LOCAL_OLLAMA_HOST = "http://127.0.0.1:11435"
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2:1b")
 
 SYSTEM_PROMPT = """You are the SigmaHelix assistant running entirely locally on the user's machine. \
@@ -53,7 +58,7 @@ class Agent:
         self.calendar = CalendarManager()
         self.launcher = LauncherManager()
         self.voice = None
-        self.host = OLLAMA_HOSTS[0]
+        self.host = OLLAMA_HOSTS[0] if OLLAMA_HOSTS else DEFAULT_LOCAL_OLLAMA_HOST
         self.history = []          # (role, content) chat history, last 8 turns
         self._llm_lock = threading.Lock()
         self.llm_available = self._check_llm(timeout=1.5)
@@ -241,7 +246,7 @@ class Agent:
                 if heard:
                     return "🎙️ Heard: {}".format(heard)
                 return "🎙️ Couldn't hear anything."
-            return "🎙️ Microphone unavailable (PyAudio not installed)."
+            return "🎙️ Offline speech-to-text is not configured; audio was not sent to a service."
         if "stop listening" in text:
             self.voice_engine.stop_listening()
             return "Voice listening stopped."

@@ -16,10 +16,11 @@ import pyttsx3
 
 
 class VoiceEngine:
-    def __init__(self):
+    def __init__(self, transcriber=None):
         # Constructing hardware backends can block on machines without a
         # usable audio device. Defer both probes until the user asks for voice.
         self.recognizer = sr.Recognizer()
+        self.transcriber = transcriber
         self.mic = None
         self._mic_checked = False
         self._mic_available = False
@@ -34,6 +35,8 @@ class VoiceEngine:
     @property
     def mic_available(self):
         """Probe microphone hardware only after an explicit voice-input request."""
+        if self.transcriber is None:
+            return False
         if not self._mic_checked:
             self._mic_checked = True
             try:
@@ -60,14 +63,14 @@ class VoiceEngine:
     # ------------------------------------------------------------------ STT
     def record_phrase(self, timeout=8, phrase_limit=15):
         """Block until one phrase is captured; returns text or None."""
-        if not self.mic_available:
+        if self.transcriber is None or not self.mic_available:
             return None
         try:
             with self.mic as source:
                 self.recognizer.adjust_for_ambient_noise(source, duration=0.6)
                 audio = self.recognizer.listen(source, timeout=timeout,
                                                phrase_time_limit=phrase_limit)
-            return self.recognizer.recognize_google(audio)
+            return self.transcriber(audio)
         except Exception:
             return None
 

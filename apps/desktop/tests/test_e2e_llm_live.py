@@ -17,6 +17,8 @@ import agent as agent_mod
 
 
 def _server_up() -> bool:
+    if not OLLAMA_HOSTS:
+        return False
     try:
         urllib.request.urlopen(f"{OLLAMA_HOSTS[0]}/api/tags", timeout=2)
         return True
@@ -25,6 +27,8 @@ def _server_up() -> bool:
 
 
 def _models() -> list:
+    if not OLLAMA_HOSTS:
+        return []
     try:
         with urllib.request.urlopen(f"{OLLAMA_HOSTS[0]}/api/tags", timeout=2) as r:
             return [m["name"] for m in json.loads(r.read())["models"]]
