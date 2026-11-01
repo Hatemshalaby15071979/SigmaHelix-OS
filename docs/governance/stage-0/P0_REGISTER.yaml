@@ -1,0 +1,279 @@
+version: "0.1.0"
+status: approved
+source_audit: "../../COMPLIPROOF_AUDIT_AND_DYNAMIC_OS_PLAN.md"
+venture: compliproof
+rule: "A P0 is closed when (a) every registered acceptance test passes in CI on a clean runner, (b) the reproducible evidence bundle is regenerated and matches, and (c) an automated attestation entry is appended to the audit ledger by the release-gate job (commit, evidence hashes, gate result). The Owner retains a non-blocking 5-business-day review window; absence of objection is recorded as tacit acceptance, not a blocking signature."
+closure_mode: automated_attestation
+review_window_days: 5
+open_p0_count: 7
+closed_p0_count: 0
+
+dispositions:
+  rebuild_in_v1: "Rebuild the affected slice in the clean-room v1; do not patch the demo."
+  truth_freeze_now: "Remove or rewrite the related claim immediately; external use remains blocked."
+  block_exposure: "Keep the capability inaccessible until the fix is verified."
+
+findings:
+  - id: P0-1
+    severity: P0
+    area: packaging_deployment
+    title: "Package cannot be installed and Docker image cannot build"
+    evidence_refs:
+      - "pyproject.toml:21"
+      - "pyproject.toml:9"
+      - "docker/Dockerfile:11-15"
+    impact: "No clean install, no working artifact, no reproducible deployment, no customer environment."
+    disposition: rebuild_in_v1
+    immediate_action: truth_freeze_now
+    owner: owner
+    implementer: null
+    target: "clean-room v1"
+    blocking_scope:
+      - "any external distribution"
+      - "any customer deployment"
+      - "any claim of installability"
+    acceptance_test:
+      - "python -m build produces a wheel containing compliproof/"
+      - "pip install dist/*.whl in a clean venv succeeds"
+      - "compliproof --help and compliproof-server --help work"
+      - "docker build succeeds and the container starts as non-root"
+      - "CI runs the same sequence from scratch"
+    closure_evidence:
+      - "wheel manifest"
+      - "clean-venv install log"
+      - "docker build log"
+      - "CI run"
+    status: open
+
+  - id: P0-2
+    severity: P0
+    area: evidence_integrity
+    title: "Seal excludes approval and key verification can never fail"
+    evidence_refs:
+      - "evidence.py:83-99"
+      - "evidence.py:205-211"
+    impact: "A 'sealed' pack can be changed after approval; a tampered answer key still verifies; the core trust claim is false."
+    disposition: rebuild_in_v1
+    immediate_action: block_exposure
+    owner: owner
+    implementer: null
+    target: "clean-room v1"
+    blocking_scope:
+      - "any audit-grade claim"
+      - "any customer evidence pack"
+      - "any external verification claim"
+    acceptance_test:
+      - "changing approval changes the seal hash"
+      - "tampering with a stored key fails verification"
+      - "seal manifest enumerates every material field"
+      - "tamper tests cover approval, key, artifact, and metadata"
+    closure_evidence:
+      - "tamper test log"
+      - "seal manifest"
+      - "independent review"
+    status: open
+
+  - id: P0-3
+    severity: P0
+    area: audit_ledger
+    title: "Audit is post-action, not concurrency-safe, not externally anchored, and split"
+    evidence_refs:
+      - "audit.py:25-26"
+      - "audit.py:75-96"
+      - "audit.py:113-136"
+      - "reconcile.py:252-267"
+      - "tests/test_reconcile.py:24"
+      - "tests/test_reconcile.py:41"
+      - "tests/test_reconcile.py:53"
+      - "tests/test_reconcile.py:81"
+    impact: "The ledger cannot prove what happened before an action, can lose concurrent writes, cannot detect truncation or rewrite, and is contaminated by tests."
+    disposition: rebuild_in_v1
+    immediate_action: block_exposure
+    owner: owner
+    implementer: null
+    target: "clean-room v1"
+    blocking_scope:
+      - "any audit-grade claim"
+      - "any pre-action evidence claim"
+      - "any external report"
+    acceptance_test:
+      - "intent event is durable before execution"
+      - "concurrent appends produce a valid, ordered chain"
+      - "truncation, rewrite, and reorder are detected by anchor comparison"
+      - "tests cannot write to the production ledger"
+      - "one canonical ledger exists"
+      - "an independent verifier validates the chain"
+    closure_evidence:
+      - "concurrency test"
+      - "tamper test"
+      - "anchor receipt"
+      - "test-isolation test"
+      - "ledger inventory"
+    truth_freeze_mitigation:
+      applied_on: "2026-10-23"
+      changes:
+        - "tests use temporary ledgers"
+        - "AuditLog refuses both known production ledgers unless allow_production=True"
+        - "regression test confirms the production ledger is byte-for-byte unchanged"
+      remaining: "Post-action logging, concurrency safety, external anchoring, the split ledger, and the 56 historical r-test-* events remain open."
+    status: open
+
+  - id: P0-4
+    severity: P0
+    area: reporting_reconciliation
+    title: "Headline metric is wrong; served report drops totals, rows, pack, and hash"
+    evidence_refs:
+      - "report.py:115-120"
+      - "report.py:291-295"
+      - "reconcile.py:252-266"
+      - "server.py:422-435"
+      - "cli.py:47-60"
+    impact: "A perfect 2-vs-2 renders 50% directly and 0% with zero rows when served; CSV is header-only; the report is not an evidence artifact."
+    disposition: rebuild_in_v1
+    immediate_action: truth_freeze_now
+    owner: owner
+    implementer: null
+    target: "clean-room v1"
+    blocking_scope:
+      - "any customer report"
+      - "any claim of report accuracy"
+      - "any CSV evidence export"
+    acceptance_test:
+      - "perfect 2-vs-2 renders 100.0% directly and when served"
+      - "downloaded report shows correct totals, pack hash, full pack, and row sections"
+      - "CLI and server produce the same totals and content"
+      - "report uses only task-specific events"
+      - "CSV parses with a standard reader and contains source values"
+      - "report generation is audited and reproducible"
+    closure_evidence:
+      - "golden test suite"
+      - "served report artifact"
+      - "CSV parse test"
+      - "report audit event"
+    status: open
+
+  - id: P0-5
+    severity: P0
+    area: server_reporting
+    title: "HTML report route crashes and all report routes are unauthenticated"
+    evidence_refs:
+      - "server.py:480-483"
+      - "server.py:412-512"
+      - "server.py:60"
+      - "server.py:669"
+      - "server.py:694"
+    impact: "The report route raises UnboundLocalError; report data is exposed without authentication; CORS and cookies are unsafe."
+    disposition: rebuild_in_v1
+    immediate_action: block_exposure
+    owner: owner
+    implementer: null
+    target: "clean-room v1"
+    blocking_scope:
+      - "any network exposure"
+      - "any customer access"
+    acceptance_test:
+      - "every report route requires authentication and authorization"
+      - "HTML, PDF, and CSV routes return correct content"
+      - "no route raises an unhandled exception on valid input"
+      - "CORS is explicit, not wildcard"
+      - "cookies are Secure, HttpOnly, and SameSite"
+      - "CSRF protection is tested"
+    closure_evidence:
+      - "route test suite"
+      - "auth test"
+      - "security scan"
+    status: open
+
+  - id: P0-6
+    severity: P0
+    area: authentication
+    title: "Authentication is not suitable for a compliance product"
+    evidence_refs:
+      - "auth.py:4"
+      - "auth.py:28-32"
+      - "auth.py:60-90"
+    impact: "At audit time: fast SHA-256 instead of bcrypt; plaintext session store; open registration; single user role; no MFA or RBAC. Registration is now disabled by default, but the remaining defects are open."
+    disposition: rebuild_in_v1
+    immediate_action: block_exposure
+    owner: owner
+    implementer: null
+    target: "clean-room v1"
+    blocking_scope:
+      - "any external user"
+      - "any customer data"
+    acceptance_test:
+      - "passwords use Argon2id or bcrypt with a current cost"
+      - "sessions are server-side, hashed at rest, rotated, and expire"
+      - "registration is invite-only or disabled"
+      - "RBAC enforces owner, approver, operator, auditor, viewer"
+      - "MFA is required for privileged roles"
+      - "login throttling and lockout are tested"
+    closure_evidence:
+      - "auth test suite"
+      - "session store inspection"
+      - "RBAC test"
+      - "security review"
+    truth_freeze_mitigation:
+      applied_on: "2026-10-23"
+      changes:
+        - "public registration is disabled by default; explicit local bootstrap only"
+        - "session cookie helper sets HttpOnly, SameSite=Lax, and conditional Secure"
+        - "demo bearer sessions were revoked"
+      remaining: "Salted SHA-256 passwords, plaintext session storage, missing MFA/RBAC, no login form, and broad route exposure remain open."
+    status: open
+
+  - id: P0-7
+    severity: P0
+    area: ui_security
+    title: "Dashboard is unusable out of the box and the unauthenticated surface is too broad"
+    evidence_refs:
+      - "dashboard/home.html"
+      - "server.py:60"
+      - "server.py:669"
+      - "server.py:694"
+    impact: "At audit time: no login form meant authenticated APIs failed; status, chat, models, and root were open; wildcard CORS and weak cookies exposed the system. CORS is now removed and cookies are hardened, but the unauthenticated routes and missing login remain open."
+    disposition: rebuild_in_v1
+    immediate_action: block_exposure
+    owner: owner
+    implementer: null
+    target: "clean-room v1"
+    blocking_scope:
+      - "any external access"
+      - "any demo to a prospect"
+    acceptance_test:
+      - "dashboard has a working login and logout"
+      - "every non-public route requires authentication"
+      - "status, chat, and models routes are authenticated or removed"
+      - "CORS is an explicit allowlist"
+      - "cookies are Secure, HttpOnly, and SameSite"
+      - "demo data is labeled simulated"
+    closure_evidence:
+      - "UI test"
+      - "route inventory"
+      - "security scan"
+    truth_freeze_mitigation:
+      applied_on: "2026-10-23"
+      changes:
+        - "wildcard CORS removed"
+        - "registration disabled by default"
+        - "demo finance, pipeline, and task data are labeled simulated"
+      remaining: "No login form; status, models, chat, and report routes remain unauthenticated; the dashboard still cannot authenticate its own API calls."
+    status: open
+
+approval:
+  owner: HatemShalaby
+  approved_on: "2026-10-23"
+  version: "0.1.0"
+  scope: "Register, owners, and dispositions approved. No P0 is closed, remediated, or accepted as a known risk."
+  statement: "I have reviewed every P0. None is accepted as a known risk. Each remains open until its acceptance test and closure evidence exist."
+
+execution_evidence:
+  as_of: "2026-10-31"
+  status: "engineering remediation and local verification recorded; formal closure unchanged"
+  report: "../../CompliProof/P0_REMEDIATION_EXECUTION_2026-10-31.md"
+  evidence_directory: "../../CompliProof/evidence/p0-remediation-2026-10-31/"
+  gate_state: "7 open / 0 closed; no Owner closure signature was entered"
+  classifications:
+    synthetic_local: "All HTTP, report, backup/restore, and container drills used synthetic data and are not customer evidence."
+    ci: "The workflow file was not run by GitHub Actions; no remote or push was configured."
+    independent_review: "No independent reviewer or Owner closure decision was supplied."

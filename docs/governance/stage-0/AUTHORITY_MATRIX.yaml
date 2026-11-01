@@ -1,0 +1,476 @@
+version: "0.1.0"
+status: adopted
+mode: solo_owner
+adopted_on: "2026-10-23"
+owner_signature: HatemShalaby
+review_cycle: "on role change, constitutional amendment, security incident, or venture stage gate"
+canonical_ledger: "one ledger; no per-module ledgers"
+
+principles:
+  - "Authority is granted per action or envelope, never per agent identity."
+  - "An agent may not approve its own action."
+  - "The Owner cannot be their own second approver."
+  - "Ambiguity freezes; it does not expand authority."
+  - "Every approval is bound to the hash of the action it authorizes."
+  - "Every denial and every break-glass use is recorded."
+
+principals:
+  - id: owner
+    kind: human
+    status: active
+    legal_name: HatemShalaby
+    roles:
+      - owner
+    note: "Sole human principal in solo-owner mode. Legal name is bound for internal governance; external contracts, payments, and public claims still require the applicable approvals."
+  - id: secondary_approver
+    kind: human
+    status: declined
+    legal_name: null
+    roles:
+      - approver
+    required_for:
+      - R3
+      - production_release
+      - evidence_deletion
+    note: "Owner declined to name a second human approver (D-011). R3 remains blocked. A single-key R3 requires a written constitutional amendment."
+  - id: external_auditor
+    kind: human_or_firm
+    status: vacant
+    legal_name: null
+    roles:
+      - auditor
+    required_for:
+      - external_audit_claims
+      - production_readiness_attestation
+      - third_party_evidence_verification
+    note: "Read-only. Cannot approve operations. Independence must be documented."
+  - id: operator_agent
+    kind: agent
+    status: not_provisioned
+    legal_name: null
+    roles:
+      - operator
+    note: "Any agent that executes work. Bound by envelopes, tool permissions, budget, and this matrix."
+  - id: viewer
+    kind: human
+    status: future
+    legal_name: null
+    roles:
+      - viewer
+    note: "Read-only access for prospective customers, advisors, or auditors. No operational authority."
+
+roles:
+  owner:
+    description: "Constitutional authority and accountable human."
+    may:
+      - "approve R0-R2 actions and envelopes"
+      - "approve R3 only when a second human approver is active"
+      - "exercise R4 powers with required advice"
+      - "declare incidents"
+      - "trigger the kill switch"
+      - "amend the constitution and this matrix"
+      - "appoint and revoke human roles"
+    must_not:
+      - "act as secondary approver"
+      - "act as independent auditor of the Owner's own work"
+      - "delegate a reserved power to an agent"
+      - "approve an action without reading its evidence"
+  approver:
+    description: "Second human key for R3 actions."
+    may:
+      - "co-approve R3 actions within an envelope"
+      - "reject any action"
+      - "request evidence"
+    must_not:
+      - "approve an action they authored or executed"
+      - "approve outside an active envelope"
+      - "hold an operating role in the same action chain"
+  auditor:
+    description: "Independent read-only reviewer."
+    may:
+      - "read evidence, ledger, reports, and access logs"
+      - "request artifacts"
+      - "issue findings"
+    must_not:
+      - "approve, execute, or alter operational records"
+      - "have write access to the ledger"
+      - "report to an operating agent"
+  operator:
+    description: "Agent that executes within an envelope."
+    may:
+      - "execute R0-R3 actions explicitly allowed by an active envelope"
+      - "draft R2-R4 proposals"
+      - "escalate"
+    must_not:
+      - "approve any action"
+      - "expand its own tools, budget, or autonomy"
+      - "access data outside its classification"
+      - "send an external communication without an approved template and envelope"
+      - "delete evidence"
+  viewer:
+    description: "Read-only human access."
+    may:
+      - "read explicitly shared artifacts"
+    must_not:
+      - "execute, approve, or export restricted data"
+
+risk_classes:
+  R0:
+    name: read_only
+    description: "Read, search, analyze, summarize. No side effects."
+    examples:
+      - "market search"
+      - "log analysis"
+      - "report reading"
+  R1:
+    name: internal_reversible
+    description: "Internal draft or reversible change that does not leave the company."
+    examples:
+      - "code branch"
+      - "internal ticket"
+      - "staging deploy"
+      - "draft memo"
+  R2:
+    name: external_reversible
+    description: "External action that can be stopped, corrected, or rolled back."
+    examples:
+      - "email to a consented list within a capped envelope"
+      - "publish an approved draft"
+      - "canary deployment with rollback"
+  R3:
+    name: external_irreversible
+    description: "External action with material legal, financial, security, or reputational impact."
+    examples:
+      - "production release"
+      - "contract signature"
+      - "payment"
+      - "public claim"
+      - "access grant"
+      - "regulated data use"
+      - "evidence deletion"
+  R4:
+    name: constitutional
+    description: "Changes to the company's authority, ownership, or existence."
+    examples:
+      - "constitutional amendment"
+      - "legal entity change"
+      - "cap table change"
+      - "security key custody change"
+      - "M&A or fundraising commitment"
+
+decision_rights:
+  - id: DR-01
+    action: "market and customer research"
+    risk_class: R0
+    agent: execute
+    human: none
+    evidence: ["research log", "source pack", "claim-to-source map"]
+  - id: DR-02
+    action: "internal analysis and scoring"
+    risk_class: R0
+    agent: execute
+    human: none
+    evidence: ["method", "inputs", "output hash"]
+  - id: DR-03
+    action: "venture thesis drafting"
+    risk_class: R1
+    agent: draft
+    human: approve before external use
+    evidence: ["thesis", "assumptions", "falsification tests"]
+  - id: DR-04
+    action: "product specification"
+    risk_class: R1
+    agent: draft
+    human: approve build envelope
+    evidence: ["spec", "acceptance tests", "non-goals"]
+  - id: DR-05
+    action: "code generation and tests"
+    risk_class: R1
+    agent: execute within build envelope
+    human: review pull request
+    evidence: ["commit", "test log", "scan report"]
+  - id: DR-06
+    action: "merge to protected branch"
+    risk_class: R1
+    agent: prepare
+    human: review and merge
+    evidence: ["diff", "review", "CI result"]
+  - id: DR-07
+    action: "staging deployment"
+    risk_class: R1
+    agent: execute within envelope
+    human: envelope approval
+    evidence: ["deploy log", "smoke test", "rollback plan"]
+  - id: DR-08
+    action: "production deployment"
+    risk_class: R3
+    agent: execute only after approval
+    human: two_key
+    evidence: ["release candidate", "canary plan", "rollback proof"]
+  - id: DR-09
+    action: "pricing proposal"
+    risk_class: R2
+    agent: draft
+    human: approve
+    evidence: ["cost model", "market evidence", "approval"]
+  - id: DR-10
+    action: "discount within approved matrix"
+    risk_class: R2
+    agent: execute within envelope
+    human: envelope approval; exception requires Owner
+    evidence: ["matrix", "deal record", "approval"]
+  - id: DR-11
+    action: "outbound campaign"
+    risk_class: R2
+    agent: execute within envelope
+    human: first campaign and every new claim
+    evidence: ["consent basis", "template hash", "send log", "stop conditions"]
+  - id: DR-12
+    action: "public content"
+    risk_class: R2
+    agent: draft
+    human: approve
+    evidence: ["claims registry check", "source pack", "approval"]
+  - id: DR-13
+    action: "support FAQ reply"
+    risk_class: R2
+    agent: execute within KB and envelope
+    human: sample and escalate exceptions
+    evidence: ["KB version", "reply log", "escalation record"]
+  - id: DR-14
+    action: "invoice draft"
+    risk_class: R2
+    agent: draft
+    human: send and approve
+    evidence: ["contract", "delivery record", "invoice hash"]
+  - id: DR-15
+    action: "payment or refund"
+    risk_class: R3
+    agent: prepare
+    human: owner_executes
+    evidence: ["approval", "bank details verified", "receipt"]
+  - id: DR-16
+    action: "contract or DPA"
+    risk_class: R3
+    agent: draft
+    human: owner_signs
+    evidence: ["counsel review", "final text", "signature"]
+  - id: DR-17
+    action: "public claim or testimonial"
+    risk_class: R3
+    agent: draft
+    human: owner_only
+    evidence: ["claims registry entry", "E2+ evidence", "approval"]
+  - id: DR-18
+    action: "production access grant"
+    risk_class: R3
+    agent: prepare
+    human: owner_only
+    evidence: ["identity", "least privilege", "expiry", "approval"]
+  - id: DR-19
+    action: "regulated data onboarding"
+    risk_class: R3
+    agent: prepare
+    human: owner_only
+    evidence: ["DPA", "classification", "residency decision", "security review"]
+  - id: DR-20
+    action: "evidence deletion"
+    risk_class: R3
+    agent: prepare
+    human: two_key
+    evidence: ["legal hold check", "retention basis", "two approvals"]
+  - id: DR-21
+    action: "incident declaration with customer impact"
+    risk_class: R3
+    agent: detect and contain
+    human: owner_declares
+    evidence: ["incident record", "containment log", "notification decision"]
+  - id: DR-22
+    action: "hiring, firing, or contracting a person"
+    risk_class: R3
+    agent: draft
+    human: owner_only
+    evidence: ["role", "assessment", "approval"]
+  - id: DR-23
+    action: "constitutional amendment"
+    risk_class: R4
+    agent: propose
+    human: owner_only
+    evidence: ["amendment text", "reason", "dissent", "signature"]
+  - id: DR-24
+    action: "legal entity, cap table, fundraising, or M&A"
+    risk_class: R4
+    agent: research and draft
+    human: owner_only_with_counsel
+    evidence: ["counsel opinion", "board record where applicable", "signature"]
+  - id: DR-25
+    action: "change the OS's tools, permissions, or autonomy"
+    risk_class: R4
+    agent: propose
+    human: owner_only
+    evidence: ["change request", "threat review", "rollback", "signature"]
+
+thresholds:
+  spend:
+    preapproved_infra_cap_usd: 50
+    preapproved_infra_note: "Owner-set cap: $50/month for infrastructure (VPS, domain, small buffer). Set by Owner on 2026-10-29. Null previously meant zero; now 50 authorizes prototype hosting."
+    new_vendor_any_amount: R3
+    payment_any_amount: owner_executes
+    refund_any_amount: owner_executes
+    pricing_exception: owner_only
+  outbound:
+    max_recipients_per_envelope: 50
+    consent_required: true
+    first_batch_human_review: true
+    max_followups: 2
+    opt_out_must_be_honored: true
+    claims_must_be_in_registry: true
+  production:
+    first_release: two_key
+    material_change: two_key
+    canary_required: true
+    rollback_proof_required: true
+    open_p0_or_p1: prohibited
+  data:
+    regulated_data_requires:
+      - "DPA"
+      - "classification"
+      - "residency decision"
+      - "owner approval"
+    cross_customer_training: prohibited
+    customer_data_in_prompts: prohibited_without_contract_and_dpa
+    demo_data_must_be_labeled: true
+  deletion:
+    audit_evidence: two_key
+    customer_data: two_key_plus_legal_hold_check
+    backups: retention_policy
+  legal:
+    contract_signature: owner_only
+    public_claims: owner_only_after_claims_registry
+    regulatory_representation: owner_only_with_counsel
+
+solo_mode:
+  status: active
+  owner_decision:
+    recorded_on: "2026-10-23"
+    decision: "No second human approver will be named. The Owner is the sole human authority."
+    consequence: "R3 actions remain blocked. A future single-key R3 would require a written constitutional amendment, not an informal exception."
+  blocked_actions:
+    - "R3 actions requiring two-key approval"
+    - "production release"
+    - "contract signature"
+    - "payment or refund"
+    - "public claim until claims registry is verified"
+    - "regulated customer data until DPA and classification"
+    - "access grant"
+    - "evidence deletion"
+    - "hiring or firing"
+    - "fundraising or M&A"
+  safety_exceptions:
+    - "Owner may declare an incident."
+    - "Owner may contain an incident under the break-glass rules."
+    - "Owner may preserve evidence."
+    - "Owner may revoke access, rotate credentials, or stop a system at any time."
+    - "These actions are protective, not value-creating; they do not require a second key."
+  break_glass:
+    allowed_for:
+      - "incident containment"
+      - "prevention of imminent harm"
+    approver: owner
+    max_duration_hours: 24
+    requirements:
+      - "written reason"
+      - "scope limited to containment"
+      - "ledger event before action"
+      - "notification to the auditor role when active"
+      - "post-incident independent review before normal operations resume"
+    prohibited_uses:
+      - "shipping a release"
+      - "signing a contract"
+      - "making a payment"
+      - "making a public claim"
+      - "deleting evidence"
+  single_points_of_failure:
+    - "Owner availability"
+    - "Owner judgment without independent challenge"
+    - "No second key for R3"
+    - "No independent auditor"
+  mitigations:
+    - "default deny"
+    - "written decision log"
+    - "external advisor or counsel for R4"
+    - "keep R3 blocked under D-011; no R3 work is authorized in solo-owner mode"
+    - "recruit an external auditor before any audit-grade claim"
+    - "kill switch tested in tabletop"
+  unlock_condition:
+    - "a future Owner decision reversing D-011, recorded in the decision log"
+    - "second human named and identity-verified"
+    - "signed acknowledgment of this matrix"
+    - "confirmed separation from the Owner"
+    - "test approval completed and logged"
+
+separation_of_duties:
+  - rule: "Owner is not the secondary approver."
+    enforcement: "system rejects approval where approver_id == owner_id"
+  - rule: "Agent is not an approver."
+    enforcement: "approval endpoint accepts human principals only"
+  - rule: "Builder is not the sole releaser."
+    enforcement: "release requires a human approval distinct from the build actor"
+  - rule: "Finance preparer is not the payer."
+    enforcement: "payment execution is Owner-only"
+  - rule: "Auditor is read-only."
+    enforcement: "auditor role has no write scope"
+  - rule: "Incident responder does not close their own postmortem."
+    enforcement: "postmortem closure requires Owner sign-off and, when active, auditor review"
+
+approval_token:
+  binding: "action_hash"
+  single_use: true
+  ttl_seconds: 900
+  signed: true
+  nonce_required: true
+  replay_protection: true
+  fields:
+    - "token_id"
+    - "action_hash"
+    - "envelope_id"
+    - "approver_id"
+    - "approver_role"
+    - "issued_at"
+    - "expires_at"
+    - "nonce"
+    - "signature"
+
+escalation:
+  - condition: "action outside envelope"
+    response: "freeze and request approval"
+  - condition: "ambiguous authority"
+    response: "freeze and escalate to Owner"
+  - condition: "missing or conflicting evidence"
+    response: "freeze and mark unresolved"
+  - condition: "data classification unknown"
+    response: "treat as restricted; do not process"
+  - condition: "security incident"
+    response: "follow INCIDENT_PLAN.md"
+  - condition: "P0 defect"
+    response: "stop the affected workflow; invoke kill switch if exposure is possible"
+
+amendment:
+  authority: owner
+  requires:
+    - "written amendment"
+    - "version increment"
+    - "decision log entry"
+    - "reason and dissent"
+    - "updated matrix"
+  prohibited:
+    - "retroactive authorization"
+    - "delegation of a reserved power to an agent"
+    - "removal of the Owner's accountability"
+
+signoff:
+  owner_name: HatemShalaby
+  owner_signature: HatemShalaby
+  signed_on: "2026-10-23"
+  version: "0.1.0"
+  statement: "I adopt this authority matrix. I understand that solo-owner mode blocks R3 actions until a second human approver is active."

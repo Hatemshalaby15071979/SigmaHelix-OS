@@ -1,0 +1,117 @@
+stage: 0
+name: "Constitution and Truth Freeze"
+status: closed
+closure_ready: true
+authorized_by: owner
+authorized_on: "2026-10-23"
+closed_on: "2026-10-23"
+owner: HatemShalaby
+operating_mode: solo_owner
+product_code_changed: true
+product_code_changes:
+  - "TF-06 registration, CORS, cookie, and loopback behavior"
+  - "TF-07 production-ledger test isolation"
+  - "TF-02 user-visible claim corrections (report, CLI, server prompt, package metadata)"
+  - "TF-05 dashboard demo labels"
+next_stage: 1
+next_stage_status: started_zero_spend_local_scope
+next_stage_started_on: "2026-10-23"
+
+exit_criteria:
+  - id: E-01
+    criterion: "Constitution adopted"
+    status: met
+    evidence: "company-os/stage-0/CONSTITUTION.md signature block; D-007"
+  - id: E-02
+    criterion: "Authority matrix adopted"
+    status: met
+    evidence: "company-os/stage-0/AUTHORITY_MATRIX.yaml signoff; D-007; D-011"
+  - id: E-03
+    criterion: "Every external claim evidenced or removed"
+    status: met
+    evidence: "CLAIMS_REGISTRY.yaml approved; truth freeze executed; 0 claims approved for external use"
+  - id: E-04
+    criterion: "Demo data labeled simulated; external access disabled"
+    status: met
+    evidence: "TRUTH_FREEZE_WORK_ORDER.md §7; TF-04 screenshot; TF-06 checks; TF-09 access inventory. No external listener or tunnel is active and loopback is the default; non-loopback binding remains possible and is an open P0-7 defect."
+  - id: E-05
+    criterion: "Kill switch tested in a tabletop"
+    status: met
+    evidence: "Kill-switch procedure exercised in the tabletop on 2026-10-23; five scenarios recorded, 0/5 passed; executable control absent; live drill required before production. Record: KILL_SWITCH_TABLETOP.md §8.1."
+  - id: E-06
+    criterion: "Every P0 has an owner and disposition"
+    status: met
+    evidence: "P0_REGISTER.yaml approval block; 7 open"
+  - id: E-07
+    criterion: "Human roles named, including gaps"
+    status: met
+    evidence: "Owner named; second approver declined in D-011; external auditor vacant"
+  - id: E-08
+    criterion: "Threat model reviewed"
+    status: met
+    evidence: "THREAT_MODEL.md sign-off; no residual risks accepted"
+  - id: E-09
+    criterion: "Evidence standard adopted"
+    status: met
+    evidence: "EVIDENCE_STANDARD.md signature block; D-007"
+  - id: E-10
+    criterion: "Decision log started"
+    status: met
+    evidence: "DECISION_LOG.md"
+
+closure_requirements:
+  - id: C-01
+    requirement: "Kill-switch tabletop completed"
+    status: met
+    evidence: "KILL_SWITCH_TABLETOP.md record completed and signed 2026-10-23; five scenarios recorded; 0/5 passed; procedure exercised; every failed control has an action and owner; incident plan corrected"
+  - id: C-02
+    requirement: "Owner final read of the executed truth-freeze diff"
+    status: met
+    evidence: "TRUTH_FREEZE_WORK_ORDER.md §7.7; Owner accepted 2026-10-23 as HatemShalaby with no changes requested"
+  - id: C-03
+    requirement: "Owner Stage 0 closure signature"
+    status: met
+    evidence: "company-os/stage-0/README.md closure signature; approved by HatemShalaby on 2026-10-23 as a governance gate only"
+
+blockers:
+  - "Kill switch is not implemented; a live drill is required before production (not a Stage 0 blocker)"
+  - "External auditor is vacant; this does not block Stage 0 but blocks any audit-grade claim"
+  - "R3 remains blocked under D-011 because the Owner declined to name a second approver"
+
+next_actions:
+  - "Remediate the tabletop findings in INCIDENT_PLAN.md §9.1"
+  - "Implement the kill switch and run a live drill before production"
+  - "Re-run the five-scenario tabletop after the controls exist"
+  - "Decide whether to engage or defer an external auditor"
+  - "Proceed with Stage 1 only within the signed zero-spend local scope in stage-1/README.md; pause at G-3 through G-8 dependencies"
+  - "Resolve G-6 and G-8 before Stage 1 closure"
+
+metrics:
+  external_claims_approved: 0
+  p0_open: 7
+  p0_closed: 0
+  tabletop_complete: true
+  tabletop_scenarios_recorded: 5
+  tabletop_scenarios_passed: 0
+  kill_switch_exercised: true
+  kill_switch_implemented: false
+  kill_switch_live_drill: false
+  signatures_complete: 5
+  signatures_required: 5
+  truth_freeze_executed: true
+  truth_freeze_owner_accepted: true
+  truth_freeze_owner_accepted_by: HatemShalaby
+  truth_freeze_owner_accepted_on: "2026-10-23"
+  tests_passed: 22
+  production_ledgers_unchanged: true
+
+notes:
+  - "Stage 0 closed on 2026-10-23 as a governance gate; this does not imply product readiness or authorize R3 actions."
+  - "Stage 1 was authorized and started on 2026-10-23 under the zero-spend local scope in stage-1/README.md §§9–10; G-6 and G-8 remain open."
+  - "The truth freeze is executed; it does not make the product production-ready."
+  - "C-02 accepted by HatemShalaby on 2026-10-23; the executed truth-freeze manifest was accepted with no changes requested."
+  - "No R3 action is permitted in solo-owner mode; a single-key R3 would require a written constitutional amendment."
+  - "No external claim is approved for use."
+  - "The 56 historical r-test-* events in the root ledger were preserved as evidence; they were not deleted."
+  - "The five-scenario tabletop is complete: 0/5 passed, the kill-switch procedure was exercised, and the executable control is absent. E-05 and C-01 are met; a live drill is required before production."
+  - "The default incident evidence location is company-os/stage-0/evidence/incidents/ with a SHA256SUMS manifest per incident."

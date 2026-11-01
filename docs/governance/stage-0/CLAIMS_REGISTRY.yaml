@@ -1,0 +1,339 @@
+version: "0.1.0"
+status: approved_for_execution
+effective: "No external claim may be used. The registry is approved; its dispositions are executed and no claim is approved for external use."
+scope: "CompliProof README, dashboard, generated reports, CLI help, decks, website copy, sales messages, and investor materials."
+owner: HatemShalaby
+
+global_rules:
+  - "A claim is either evidenced, attributed, labeled hypothesis, or removed."
+  - "E2+ evidence is required for a product claim; E3/E4 for a security or audit claim."
+  - "A claim about a customer requires written permission and a reviewed case study."
+  - "A market-size claim requires a stated method and sources."
+  - "A competitive absolute requires a dated, reproducible comparison."
+  - "No timeline or revenue target may be presented as a forecast."
+  - "Demo data must be labeled simulated wherever it appears."
+  - "When in doubt, remove the claim."
+
+registry_scope: "Pre-freeze claim inventory. Locations and current_status describe the audited surface before TF-01–TF-05. See truth_freeze_execution for the executed state."
+
+summary:
+  total_claims: 20
+  approved_for_external_use: 0
+  blocked_or_prohibited: 20
+  note: "Dispositions were executed in the truth freeze. No claim is approved for external use."
+
+claims:
+  - id: CLM-001
+    text: "Audit/evidence reconciliation platform for regulated mid-market BPOs and contact centres."
+    location: "CompliProof/README.md:3"
+    category: positioning
+    current_status: unsupported
+    disposition: rewrite
+    proposed_text: "A prototype reconciliation and evidence-pack tool for regulated mid-market BPOs and contact centres."
+    required_evidence:
+      - "at least one design-partner pilot"
+      - "auditor review of the pack format"
+      - "security review"
+    external_use: blocked
+    owner: owner
+    note: "The category is plausible; the word 'platform' and the audit implication are not yet earned."
+
+  - id: CLM-002
+    text: "Produces a hash-chained, auditable reconciliation report with evidence links back to source rows."
+    location: "CompliProof/README.md:5-6"
+    category: product
+    current_status: false_in_current_build
+    disposition: rewrite
+    proposed_text: "Produces a local reconciliation report and an evidence pack. The current build has known integrity defects and is not audit-grade."
+    required_evidence:
+      - "correct task-specific audit chain"
+      - "external anchor"
+      - "source-row linkage test"
+      - "third-party verification"
+    external_use: blocked
+    owner: owner
+    note: "The chain is not externally anchored; report rows and pack are lost in the served path."
+
+  - id: CLM-003
+    text: "Fastest to ship (4–8 weeks)."
+    location: "CompliProof/README.md:7"
+    category: delivery
+    current_status: unsupported
+    disposition: remove
+    proposed_text: null
+    required_evidence: []
+    external_use: prohibited
+    owner: owner
+    note: "Timeline claim. No delivery evidence. Planning is stage-gated, not date-gated."
+
+  - id: CLM-004
+    text: "Easiest to prove ROI on ($500/mo)."
+    location: "CompliProof/README.md:7"
+    category: pricing
+    current_status: unsupported
+    disposition: remove
+    proposed_text: null
+    required_evidence:
+      - "pricing interviews"
+      - "willingness-to-pay evidence"
+      - "unit economics"
+    external_use: prohibited
+    owner: owner
+    note: "No buyer has validated the price."
+
+  - id: CLM-005
+    text: "On-ramp to the full AuditTrail platform."
+    location: "CompliProof/README.md:8"
+    category: strategy
+    current_status: unsupported
+    disposition: remove
+    proposed_text: null
+    required_evidence:
+      - "a defined platform with a roadmap and evidence"
+    external_use: prohibited
+    owner: owner
+    note: "No AuditTrail platform is evidenced in the repository."
+
+  - id: CLM-006
+    text: "BPOs spend 1–3 days per client per month assembling evidence."
+    location: "CompliProof/README.md:12-15"
+    category: market
+    current_status: hypothesis
+    disposition: hypothesis_only
+    proposed_text: "Hypothesis: BPOs may spend 1–3 days per client per month assembling evidence. To be tested in ICP interviews."
+    required_evidence:
+      - "at least 12 ICP interviews"
+      - "at least 7 confirm the pain"
+      - "time measurements from at least 3 prospects"
+    external_use: blocked
+    owner: owner
+    note: "Plausible but unsourced."
+
+  - id: CLM-007
+    text: "None sell an auditable evidence trail of coaching decisions as a standalone product."
+    location: "CompliProof/README.md:17-19"
+    category: competitive
+    current_status: unsupported
+    disposition: rewrite
+    proposed_text: "We have not yet completed a dated, reproducible competitive review. This is a hypothesis to test."
+    required_evidence:
+      - "dated competitive matrix"
+      - "pricing and packaging evidence for each competitor"
+      - "win/loss evidence"
+    external_use: prohibited
+    owner: owner
+    note: "Absolute competitive claim without a current, sourced comparison."
+
+  - id: CLM-008
+    text: "CSV-to-CSV reconciliation matches by key column and flags mismatches."
+    location: "CompliProof/README.md:23-25"
+    category: product
+    current_status: partially_true
+    disposition: rewrite_with_limitations
+    proposed_text: "The prototype matches CSV rows by a key column on the happy path. Duplicate keys, missing keys, ordering, and large-file behavior are not yet production-safe."
+    required_evidence:
+      - "golden tests for duplicates and missing keys"
+      - "large-file test"
+      - "deterministic ordering test"
+    external_use: blocked
+    owner: owner
+    note: "Happy path works; edge cases do not."
+
+  - id: CLM-009
+    text: "Every reconciliation is recorded before it runs."
+    location: "CompliProof/README.md:25"
+    category: audit
+    current_status: false_in_current_build
+    disposition: remove
+    proposed_text: null
+    required_evidence:
+      - "pre-action intent event"
+      - "durable write before execution"
+      - "test proving ordering"
+    external_use: prohibited
+    owner: owner
+    note: "The event is appended after reconciliation completes."
+
+  - id: CLM-010
+    text: "Append-only, tamper-evident via SHA-256 hash chain."
+    location: "CompliProof/README.md:26"
+    category: security
+    current_status: false_in_current_build
+    disposition: rewrite
+    proposed_text: "The current build keeps a local SHA-256 hash chain. It has no external anchor, no single-writer guarantee, and no third-party verification, so it is not tamper-evident."
+    required_evidence:
+      - "single-writer or transactional append"
+      - "external RFC 3161 anchor"
+      - "truncation and rewrite detection test"
+      - "independent verification"
+    external_use: prohibited
+    owner: owner
+    note: "A local hash chain alone does not establish tamper evidence."
+
+  - id: CLM-011
+    text: "Sealed evidence pack; reviewers can verify the report matches the underlying audit chain."
+    location: "CompliProof/README.md:27-28"
+    category: security
+    current_status: false_in_current_build
+    disposition: remove
+    proposed_text: null
+    required_evidence:
+      - "seal covers approval"
+      - "key verification fails on tamper"
+      - "verification CLI/API"
+      - "task-specific report events"
+      - "third-party verification"
+    external_use: prohibited
+    owner: owner
+    note: "Approval is outside the seal; key verification always passes; no verifier exists."
+
+  - id: CLM-012
+    text: "Confidence gate: deterministic, escalates instead of guessing when the match is weak."
+    location: "CompliProof/README.md:29-30"
+    category: product
+    current_status: false_in_current_build
+    disposition: remove
+    proposed_text: null
+    required_evidence:
+      - "gate wired into the reconcile path"
+      - "threshold tests"
+      - "escalation evidence"
+    external_use: prohibited
+    owner: owner
+    note: "gate.py is not imported anywhere."
+
+  - id: CLM-013
+    text: "ADHD-friendly dashboard."
+    location: "CompliProof/README.md:31"
+    category: product
+    current_status: unsupported
+    disposition: rewrite
+    proposed_text: "A task-focused dashboard with a single next action."
+    required_evidence:
+      - "usability test with target users"
+      - "accessibility review"
+    external_use: blocked
+    owner: owner
+    note: "Do not use a clinical or neurodivergence claim without evidence and appropriate review."
+
+  - id: CLM-014
+    text: "Local, no cloud."
+    location: "CompliProof/README.md:31"
+    category: architecture
+    current_status: partially_true
+    disposition: verify_and_limit
+    proposed_text: "The prototype runs locally. The Ollama chat proxy connects to a locally configured model endpoint; no cloud model is used by default."
+    required_evidence:
+      - "network trace"
+      - "configuration review"
+      - "dependency review"
+    external_use: blocked
+    owner: owner
+    note: "Verify that no telemetry or external call is made."
+
+  - id: CLM-015
+    text: "FastAPI dashboard + Ollama chatbot."
+    location: "CompliProof/README.md:59"
+    category: architecture
+    current_status: false
+    disposition: rewrite
+    proposed_text: "Standard-library HTTP server with an Ollama chat proxy."
+    required_evidence:
+      - "code inspection"
+    external_use: blocked
+    owner: owner
+    note: "The server is ThreadingHTTPServer, not FastAPI."
+
+  - id: CLM-016
+    text: "MIT license."
+    location: "CompliProof/README.md:63"
+    category: legal
+    current_status: unsupported
+    disposition: remove_until_file_exists
+    proposed_text: null
+    required_evidence:
+      - "root LICENSE file"
+      - "dependency license review"
+    external_use: prohibited
+    owner: owner
+    note: "MIT is declared in pyproject but no LICENSE file exists at the repository root."
+
+  - id: CLM-017
+    text: "Pre-revenue."
+    location: "CompliProof/README.md:67"
+    category: financial
+    current_status: contradicted_by_demo_data
+    disposition: rewrite
+    proposed_text: "Prototype. No revenue. Demo finance and pipeline data are simulated."
+    required_evidence:
+      - "finance records"
+      - "labeled demo data"
+    external_use: blocked
+    owner: owner
+    note: "workspace/finance/finance.json shows mrr 5000 and 10 customers."
+
+  - id: CLM-018
+    text: "Target: first paying customer ($500/mo) within 4–8 weeks."
+    location: "CompliProof/README.md:67"
+    category: commercial
+    current_status: unsupported
+    disposition: remove
+    proposed_text: null
+    required_evidence:
+      - "validated pricing"
+      - "pilot evidence"
+    external_use: prohibited
+    owner: owner
+    note: "Timeline and price are unvalidated."
+
+  - id: CLM-019
+    text: 'Dashboard shows "Audit chain OK" and "Evidence sealed".'
+    location: "CompliProof/dashboard/home.html:235-236, :401"
+    category: product_ui
+    current_status: misleading
+    disposition: remove_or_replace
+    proposed_text: 'Local chain check (not externally anchored) and evidence pack hash (prototype).'
+    required_evidence:
+      - "task-specific chain check"
+      - "seal verification"
+      - "anchor status"
+    external_use: prohibited
+    owner: owner
+    note: "The dashboard reports a global chain check and a seal that does not cover approval."
+
+  - id: CLM-020
+    text: "Architecture lineage from Helix Prime, Helix Education, and Live Support Assistant."
+    location: "CompliProof/README.md:52-59"
+    category: provenance
+    current_status: unverified
+    disposition: verify_or_remove
+    proposed_text: null
+    required_evidence:
+      - "source repository commits"
+      - "license compatibility review"
+      - "provenance record"
+    external_use: blocked
+    owner: owner
+    note: "Lineage claims require source and license evidence."
+
+review:
+  reviewer: HatemShalaby
+  reviewed_on: "2026-10-23"
+  approved_on: "2026-10-23"
+  version: "0.1.0"
+  statement: "I have reviewed every claim. No claim is approved for external use until its disposition is executed and its evidence is linked."
+
+truth_freeze_execution:
+  work_order: "company-os/stage-0/TRUTH_FREEZE_WORK_ORDER.md"
+  executed_on: "2026-10-23"
+  status: executed
+  external_use_approved: 0
+  readme: "Claims CLM-001 through CLM-020 reviewed; unsupported platform, timeline, price, ROI, provenance, seal, gate, FastAPI, license, and first-customer statements were removed or rewritten."
+  dashboard: "Local-chain and prototype evidence-pack language applied; demo finance, pipeline, and task labels added."
+  data: "Finance, pipeline, and task demo records contain simulated: true."
+  license: "MIT metadata declaration removed from pyproject.toml until a root LICENSE file exists."
+  evidence: "company-os/stage-0/TRUTH_FREEZE_WORK_ORDER.md §7; company-os/stage-0/evidence/TF-04-dashboard-demo-label.png"
+  owner_final_read: accepted
+  owner_final_read_by: HatemShalaby
+  owner_final_read_on: "2026-10-23"
+  note: "Execution removes the misleading external surface. It does not evidence any claim. Every claim remains blocked or prohibited for external use."

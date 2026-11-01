@@ -1,0 +1,26 @@
+# Stage 2 — Company OS Build + Governance Fixes
+*Owner: HatemShalaby | Spend cap: $40/mo | Framework: Python desktop (CustomTkinter)*
+*Status: PLAN — awaiting build execution*
+
+## Direction (per owner instruction)
+Build BOTH now:
+1. **Personal company OS** — local desktop app used by you starting today, for everything.
+2. **Sellable version** — same core, tested against simulated tenant data, packaged as `.exe` so it can be sold once the first buyer appears.
+No more waiting for external partners/clients. Simulated data substitutes for real clients until a buyer exists.
+
+## Phase 0 — Governance blockers (resolve before build)
+
+| ID | Task | Deliverable | Status |
+|----|------|-------------|--------|
+| G-6 | Auditor path: simulated audit + FreeTSA anchor verification flags (external auditor vacant — not a blocker). Verification flags added. | `stage-2/AUDIT_PATH.md`, `stage-2/ANCHOR_FREETSA.md` | **RESOLVED** |
+| G-7 | Archive both ledgers (G-7) | `stage-2/LEDGERS_ARCHIVED.md` | **RESOLVED** |
+| G-8 | Rebuild all 7 P0s clean-room v1 | `stage-2/P0_REBUILD.md` | **RESOLVED** |
+| G-9 | Confirm Helix Prime verification + FreeTSA anchor verification | `stage-2/VERIFICATION.md` | **RESOLVED** |
+| G-10 | Spend cap $40/mo documented + enforced | `stage-2/BUDGET.md` | **RESOLVED** |
+| G-11 | Direction change documented: built for you now; sellable tested version | `stage-2/VENTURE_DIRECTION.md` | **RESOLVED** |
+| G-12 | Simulated tenant data accepted as real-client substitute | `stage-2/SIMULATED_TENANT_DATA.md` | **RESOLVED** |
+
+## Status Summary
+- All governance blockers (G-6..G-12): **RESOLVED**
+- Company OS build: **Phase 1 ready**
+- Next step: Begin Phase 1 — Company OS app build

@@ -1,0 +1,130 @@
+id: v_compliproof
+name: "CompliProof"
+status: dogfood
+stage: 0
+stage_status: "OS Stage 0 closed 2026-10-23 as a governance gate; OS Stage 1 authorized and started 2026-10-23 within zero-spend local scope; G-6 and G-8 remain open; CompliProof remains a prototype and is not production-ready"
+owner: HatemShalaby
+created_from: "COMPLIPROOF_AUDIT_AND_DYNAMIC_OS_PLAN.md"
+
+role:
+  primary: "First dogfood venture for the Dynamic Company OS."
+  secondary: "Not the foundation of the OS. The OS must be able to kill this venture."
+  code_status: "Prototype. Audit-grade slice to be rebuilt from a clean spec."
+
+thesis: >
+  Regulated mid-market BPOs and contact centres must prove to their clients that
+  QA, adherence, and coaching happened. They assemble evidence manually from
+  disconnected exports. A source-linked reconciliation and evidence-pack product
+  can reduce that work and produce a defensible trail, if the evidence is real.
+
+target_customer:
+  segment: "Regulated mid-market BPOs and contact centres"
+  first_icp: "Healthcare-support BPOs"
+  size: "roughly 200-2,000 seats"
+  buyer: "QA, compliance, or operations leader with a client-audit obligation"
+  current_alternative: "Hypothesis: spreadsheets, screenshots, PDFs, and manual reconciliation. Not yet validated in interviews."
+  budget_owner: "To be confirmed in discovery"
+
+problem:
+  - "Evidence assembly is manual, recurring, and error-prone."
+  - "QA, WFM, and coaching data live in disconnected systems."
+  - "Client auditors need traceability from a report to a source row."
+  - "Unverified hypothesis: existing QA tools score calls but do not sell a standalone evidence trail."
+
+product_slice_v1:
+  - "Ingest two CSV exports."
+  - "Validate schema, key column, duplicates, and missing values; fail closed."
+  - "Deterministically match and classify rows."
+  - "Provide a reviewer exception queue with reasons."
+  - "Seal the review decision and the evidence pack."
+  - "Produce HTML/PDF report and machine-readable evidence JSON."
+  - "Provide a third-party verification CLI/API."
+  - "Keep a task-specific audit trail."
+
+non_goals_v1:
+  - "Call scoring, speech analytics, coaching workflows, WFM, or scheduling."
+  - "Full GRC, SOC 2 automation, or vendor risk management."
+  - "Multi-tenant SaaS, SSO, custom connectors, or real-time integrations."
+  - "Generative AI in the answering or reconciliation path."
+  - "Any claim of compliance certification."
+
+validation:
+  interviews_required: 12
+  pain_confirmations_required: 7
+  budget_confirmations_required: 5
+  sample_exports_required: 3
+  auditor_format_reviews_required: 1
+  design_partners_required: 3
+  paid_pilots_required: 2
+  auditor_acceptances_required: 1
+  status: not_started
+
+gates:
+  build_gate:
+    status: blocked
+    requirements:
+      - "3 design partners commit data, time, and a success metric"
+      - "evidence pack format accepted in principle by at least 1 auditor"
+      - "security/privacy review complete for pilot data"
+      - "unit economics hypothesis documented"
+  pilot_gate:
+    status: blocked
+    requirements:
+      - "2 paid pilots or 1 paid pilot plus 2 signed letters of intent"
+      - "time-to-first-report measured"
+      - "exception resolution measured"
+      - "at least 1 client accepts the pack in a real audit conversation"
+      - "no open P0 security or evidence defect"
+  scale_gate:
+    status: blocked
+    requirements:
+      - "retention and expansion evidence"
+      - "repeatable onboarding without engineering"
+      - "gross margin and support load within threshold"
+      - "a channel or referral motion is visible"
+
+kill_criteria:
+  - "Fewer than 3 of 12 ICP interviews confirm the pain and budget."
+  - "Incumbents bundle an acceptable evidence pack for free and buyers will not pay separately."
+  - "Design partners refuse to share data or sign a DPA."
+  - "Auditors reject the format and no viable format emerges."
+  - "Unit economics cannot support the support burden."
+  - "Legal or regulatory risk makes the data handling impractical."
+  - "The Owner cannot commit the required customer-discovery time."
+
+budget:
+  monthly_cap_usd: null
+  note: "Null means zero. No spend until the Owner sets a cap."
+  revenue_to_date_usd: 0
+  customers_to_date: 0
+  demo_data: "Simulated; must be labeled."
+
+authority:
+  build: "R1 inside an approved build envelope"
+  staging: "R1 inside an approved envelope"
+  production: "R3; blocked in solo-owner mode"
+  external_claims: "R3; blocked until claims registry is verified"
+  customer_data: "R3; blocked until DPA and classification"
+  payments: "Owner only"
+  contracts: "Owner only"
+
+evidence:
+  audit: "COMPLIPROOF_AUDIT_AND_DYNAMIC_OS_PLAN.md"
+  claims: "company-os/stage-0/CLAIMS_REGISTRY.yaml"
+  p0_register: "company-os/stage-0/P0_REGISTER.yaml"
+  constitution: "company-os/stage-0/CONSTITUTION.md"
+  authority: "company-os/stage-0/AUTHORITY_MATRIX.yaml"
+
+metrics:
+  north_star: "Auditor-accepted evidence packs per design partner"
+  supporting:
+    - "time to first report"
+    - "exception resolution time"
+    - "reconciliation accuracy on golden cases"
+    - "audit acceptance rate"
+    - "support minutes per report"
+  trust:
+    - "open P0 count"
+    - "evidence verification pass rate"
+    - "claims approved vs blocked"
+    - "test-ledger contamination incidents"

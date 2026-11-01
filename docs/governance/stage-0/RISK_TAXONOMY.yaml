@@ -1,0 +1,233 @@
+version: "0.1.0"
+status: adopted
+adopted_on: "2026-10-23"
+purpose: "Classify every consequential action before it runs."
+default_when_uncertain: R3
+default_when_data_unclassified: restricted
+rule: "Risk class is determined by the worst credible consequence, not by the intent of the actor."
+
+dimensions:
+  reversibility:
+    reversible: "Can be stopped, corrected, or rolled back without material loss."
+    partially_reversible: "Can be corrected, but with cost, delay, or reputational exposure."
+    irreversible: "Cannot be undone: payment, contract, public claim, deletion, access grant."
+  blast_radius:
+    single_record: "One record or one internal artifact."
+    single_customer: "One customer, one tenant, or one design partner."
+    multiple_customers: "More than one customer or an entire market segment."
+    company: "Legal, financial, or existential exposure to the company."
+  external_visibility:
+    internal: "No external party sees it."
+    named_recipient: "One identified external recipient."
+    public: "Any member of the public can see it."
+  data_sensitivity:
+    public: "Public data."
+    internal: "Internal business data."
+    confidential: "Customer or commercial data under NDA."
+    regulated: "PHI, financial, or other regulated data."
+    restricted: "Secrets, keys, legal hold, or board material."
+
+risk_classes:
+  R0:
+    name: read_only
+    definition: "Read, search, analyze, summarize, or score without side effects."
+    authorization: "Policy allow; log the query and the output hash."
+    human_role: none
+    examples:
+      - "Read a public web page."
+      - "Analyze an internal CSV that is already classified."
+      - "Summarize an audit log."
+      - "Score a market segment against defined criteria."
+    prohibited:
+      - "Writing to an external system."
+      - "Sending a message."
+      - "Changing a record."
+    evidence:
+      - "query or method"
+      - "source list"
+      - "output hash"
+      - "classification of inputs"
+    stop_conditions:
+      - "Source is paywalled or access is not authorized."
+      - "Input contains unclassified regulated data."
+
+  R1:
+    name: internal_reversible
+    definition: "Create or change an internal artifact that can be reverted without external impact."
+    authorization: "Agent may execute inside a build or drafting envelope; log intent and result."
+    human_role: "Sample and audit."
+    examples:
+      - "Create a code branch."
+      - "Write a draft spec."
+      - "Open an internal ticket."
+      - "Deploy to a local or staging environment."
+      - "Run tests and scans."
+    prohibited:
+      - "Merging to a protected branch without human review."
+      - "Sending anything external."
+      - "Using regulated data outside an approved environment."
+    evidence:
+      - "intent event"
+      - "diff or artifact hash"
+      - "test or scan result"
+      - "rollback reference"
+    stop_conditions:
+      - "Build touches production credentials."
+      - "Test data contains customer data."
+      - "Change exceeds the envelope's file or service scope."
+
+  R2:
+    name: external_reversible
+    definition: "An external action that can be stopped, corrected, or rolled back within an approved envelope."
+    authorization: "Owner-approved envelope; post-hoc sample; stop conditions active."
+    human_role: "Approve envelope; review first batch; sample thereafter."
+    examples:
+      - "Send up to 50 approved emails to a consented list."
+      - "Publish an approved content draft with a correction path."
+      - "Deploy a canary with automatic rollback."
+      - "Send an FAQ support reply from the approved KB."
+    prohibited:
+      - "New claim not in the claims registry."
+      - "New recipient list not approved."
+      - "Any commitment, discount, refund, or legal term."
+      - "Any message to a regulator, auditor, or journalist."
+    evidence:
+      - "envelope ID"
+      - "consent basis"
+      - "template hash"
+      - "recipient list hash"
+      - "send or publish log"
+      - "stop-condition monitor"
+    stop_conditions:
+      - "Any opt-out or complaint."
+      - "Bounce or error rate above the envelope threshold."
+      - "Recipient asks a legal, security, or billing question."
+      - "Message would exceed the approved claims."
+      - "Canary metric breaches the rollback threshold."
+
+  R3:
+    name: external_irreversible
+    definition: "An external action with material legal, financial, security, or reputational consequence that cannot be fully undone."
+    authorization: "Two-key human approval: Owner plus an active secondary approver."
+    human_role: "Two named humans; one may be the Owner, neither may be the executing agent."
+    examples:
+      - "Production release."
+      - "Contract, DPA, or terms signature."
+      - "Payment, refund, or credit."
+      - "Public claim, testimonial, or regulatory representation."
+      - "Production access grant or credential issuance."
+      - "Regulated customer data onboarding."
+      - "Audit evidence deletion."
+      - "Customer-impacting incident declaration."
+      - "Hiring, firing, or contractor commitment."
+    prohibited:
+      - "Solo-owner approval."
+      - "Agent execution of the human-only step."
+      - "Retroactive approval."
+      - "Approval without an action hash."
+    evidence:
+      - "action hash"
+      - "two distinct approval tokens"
+      - "rollback or compensation plan"
+      - "legal or security review where applicable"
+      - "execution receipt"
+      - "post-action verification"
+    stop_conditions:
+      - "Second approver is vacant or conflicted."
+      - "Rollback is impossible and no compensation plan exists."
+      - "Open P0 or P1 defect in the affected path."
+      - "Claims registry lacks the claim."
+      - "Data classification or DPA is missing."
+
+  R4:
+    name: constitutional
+    definition: "A change to the company's authority, ownership, legal existence, or security root of trust."
+    authorization: "Owner only, with required counsel or advisor input; no agent execution."
+    human_role: "Owner; counsel where required; board where applicable."
+    examples:
+      - "Amend the constitution or authority matrix."
+      - "Create or change a legal entity."
+      - "Change cap table or ownership."
+      - "Change security key custody."
+      - "Fundraising, M&A, or investor commitment."
+      - "Change the OS's own tools, permissions, or autonomy."
+    prohibited:
+      - "Agent execution."
+      - "Delegation."
+      - "Approval by acclamation or implication."
+    evidence:
+      - "written decision"
+      - "counsel or advisor opinion where required"
+      - "signed instrument"
+      - "decision log entry"
+      - "communication record"
+    stop_conditions:
+      - "Counsel has not reviewed where required."
+      - "The change would retroactively legitimize an unauthorized action."
+      - "The change would remove human accountability."
+
+modifiers:
+  regulated_data:
+    effect: "Raise by one class, minimum R2 for processing inside an already approved environment."
+    note: "Onboarding a new regulated data source is R3. Processing without a DPA, classification, and Owner approval is prohibited."
+  public_visibility:
+    effect: "Raise by one class, minimum R2."
+  security_credential:
+    effect: "Minimum R3."
+  deletion:
+    effect: "Minimum R3."
+  minor:
+    effect: "Do not lower the class. Minors' data is treated as regulated."
+  cross_border:
+    effect: "Raise by one class; requires residency decision."
+  ai_generated_public_content:
+    effect: "Minimum R2; R3 if it makes a claim about a person, customer, or compliance status."
+
+decision_procedure:
+  - step: 1
+    question: "What is the worst credible consequence if this goes wrong?"
+  - step: 2
+    question: "Can it be fully undone? If not, it is at least R3."
+  - step: 3
+    question: "Does it leave the company or become visible to an external party? If yes, at least R2."
+  - step: 4
+    question: "Does it change authority, ownership, or the security root of trust? If yes, R4."
+  - step: 5
+    question: "Is the data regulated, restricted, or unclassified? If yes, raise the class."
+  - step: 6
+    question: "Is the authority or evidence ambiguous? If yes, freeze and escalate."
+
+misclassification:
+  response:
+    - "Stop the action."
+    - "Preserve evidence."
+    - "Record the misclassification."
+    - "Reclassify and obtain the correct approval."
+    - "Add a test or review that detects the same ambiguity."
+  prohibited:
+    - "Continuing because the action is already partly done."
+    - "Treating urgency as authority."
+
+examples:
+  compliproof:
+    - action: "Run a reconciliation on two synthetic CSVs"
+      class: R1
+      reason: "Internal, reversible, no customer data."
+    - action: "Send a design-partner report containing real client data"
+      class: R3
+      reason: "External, confidential or regulated data, reputational and contractual exposure."
+    - action: "Publish a claim that the report is audit-grade"
+      class: R3
+      reason: "Public claim; requires E4 evidence and Owner approval."
+    - action: "Delete a failed test ledger"
+      class: R3
+      reason: "Evidence deletion; requires two-key approval and legal-hold check."
+    - action: "Deploy the dashboard to a public URL"
+      class: R3
+      reason: "Production exposure and access grant."
+
+signoff:
+  owner: HatemShalaby
+  owner_signature: HatemShalaby
+  signed_on: "2026-10-23"
+  version: "0.1.0"
