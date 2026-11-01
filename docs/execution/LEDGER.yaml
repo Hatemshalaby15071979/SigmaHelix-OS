@@ -208,14 +208,14 @@ gates:
         evidence: docs/execution/evidence/P2-007.md
       - id: P2-008
         title: Watch mode with debounce and rescan
-        status: in_progress
+        status: done
         depends_on: [P2-007]
         acceptance:
           - "New repo detected within 5 seconds"
         evidence: docs/execution/evidence/P2-008.md
       - id: P2-009
         title: Launcher profiles, command preview, and run history
-        status: ready
+        status: in_progress
         depends_on: [P2-007]
         acceptance:
           - "Unknown command never auto-runs"

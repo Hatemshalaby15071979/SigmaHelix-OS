@@ -24,6 +24,7 @@ from .project_scanner import (
     ProjectScanError,
     ProjectScanner,
 )
+from .project_watch import ProjectWatch, ProjectWatchError
 from .occurrences import OccurrenceError, OccurrenceService
 from .scheduler import JobRun, MissedJobRun, ScheduledJob, Scheduler, SchedulerError
 from .repositories import (
@@ -77,6 +78,8 @@ __all__ = [
     "ProjectScanBatch",
     "ProjectScanError",
     "ProjectScanner",
+    "ProjectWatch",
+    "ProjectWatchError",
     "RepositoryOperationError",
     "ScheduledJob",
     "Scheduler",
