@@ -41,6 +41,17 @@ All notable changes to SigmaHelix are recorded here. The format follows
   Keys are added, live-verified against the provider, and removed entirely from
   the OS keyring (never written to config). Unverified or bad keys are reported
   and never stored.
+- **Tommy manages and executes question-driven tasks.** New agent actions let
+  Tommy create a task with its questions, add/answer/reopen/show questions, and
+  **execute** a task — answering its open questions with the model and marking it
+  done once every answer is in. These are deterministic, so "add question to
+  task 3: …", "answer question 1 on task 3: …" and "execute task 3" work even
+  without a model connection.
+- **Tommy has a coding workspace.** Ask him to create a webapp, app, site, tool
+  or script and he scaffolds a runnable project under `cloned_repos` (with a
+  **Run** link) and can edit its files via file operations — instead of
+  apologising that he cannot do it here. If a model reply refuses a build
+  request, the refusal is replaced by an actual scaffold.
 - Tasks and notes live in the durable SQLite core. Migration v14 adds
   `pinned`, `display_id` and `recurrence` to tasks and `pinned`/`display_id` to
   notes; existing rows are numbered during the upgrade.
@@ -84,6 +95,15 @@ All notable changes to SigmaHelix are recorded here. The format follows
 
 ### Fixed
 
+- The Projects view showed 0 and Tommy said "Projects directory not found" when
+  run from an installed binary: the projects dir fell back to `~/projects`
+  because there was no source checkout sibling. `projects_dir()` now discovers a
+  `cloned_repos` folder (under home and mounted volumes) and caches it, so the
+  real projects are scanned on every run from either the source checkout or an
+  installed binary.
+- The web Settings button did nothing because `settings` was missing from the
+  UI's `VIEWS` list; clicking it silently fell back to Chat. It now opens the
+  Settings view.
 - `console.py` read `agent.model`, an attribute that does not exist; it now
   reads `agent.model_name`.
 - The model picker read `T.colors["text"]`, a missing theme key that raised

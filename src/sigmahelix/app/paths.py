@@ -66,16 +66,82 @@ def projects_dir() -> Path:
     """Directory holding the user's project folders.
 
     Precedence: ``SIGMAHELIX_PROJECTS_DIR`` → ``COMPANY_OS_PROJECTS_DIR``
-    (legacy) → ``<checkout>/../cloned_repos`` when that exists → ``~/projects``.
+    (legacy) → ``<checkout>/../cloned_repos`` when that exists → a discovered
+    ``cloned_repos`` folder (for installed binaries that have no checkout
+    sibling) → ``~/projects``.
     """
     override = os.environ.get("SIGMAHELIX_PROJECTS_DIR") or os.environ.get(
         "COMPANY_OS_PROJECTS_DIR"
     )
     if override:
         return _expand(override)
+    global _PROJECTS_DIR_CACHE
+    if _PROJECTS_DIR_CACHE is not None:
+        return _PROJECTS_DIR_CACHE
     root = checkout_root()
     if root is not None:
         sibling = root.parent / "cloned_repos"
         if sibling.is_dir():
+            _PROJECTS_DIR_CACHE = sibling
             return sibling
-    return Path.home() / "projects"
+    discovered = _discover_cloned_repos()
+    if discovered is not None:
+        _PROJECTS_DIR_CACHE = discovered
+        return discovered
+    fallback = Path.home() / "projects"
+    _PROJECTS_DIR_CACHE = fallback
+    return fallback
+
+
+#: Resolved projects dir is cached so a (possibly slow) discovery runs once.
+_PROJECTS_DIR_CACHE: Path | None = None
+
+
+def _discover_cloned_repos() -> Path | None:
+    """Find a ``cloned_repos`` directory when there is no checkout sibling.
+
+    When SigmaHelix is installed away from its source (e.g. into
+    ``~/.local/share``), the sibling trick cannot locate the user's projects.
+    We then search a bounded set of roots — the home directory and mounted
+    volumes — for a folder literally named ``cloned_repos``.
+    """
+    roots: list[tuple[Path, int]] = [(Path.home(), 1)]
+    for mount in ("/run/media", "/media", "/mnt"):
+        mount_path = Path(mount)
+        if not mount_path.is_dir():
+            continue
+        try:
+            for child in sorted(mount_path.iterdir()):
+                if child.is_dir():
+                    roots.append((child, 3))
+        except OSError:
+            continue
+    for root, depth in roots:
+        found = _find_dir_named(root, "cloned_repos", depth)
+        if found is not None:
+            return found
+    return None
+
+
+def _find_dir_named(root: Path, name: str, max_depth: int) -> Path | None:
+    """Return the first directory named ``name`` within ``max_depth`` of ``root``."""
+    if max_depth < 0 or not root.is_dir():
+        return None
+    try:
+        children = sorted(
+            child
+            for child in root.iterdir()
+            if child.is_dir() and not child.is_symlink()
+        )
+    except OSError:
+        return None
+    for child in children:
+        if child.name == name:
+            return child
+    if max_depth == 0:
+        return None
+    for child in children:
+        found = _find_dir_named(child, name, max_depth - 1)
+        if found is not None:
+            return found
+    return None

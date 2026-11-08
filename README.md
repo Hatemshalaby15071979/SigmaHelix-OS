@@ -24,12 +24,12 @@ without a browser.
 
 | Area | Capability |
 | --- | --- |
-| Tasks | Question-driven: a task is a question seeking an answer. Each task carries sub-questions with answers + evidence; it is only "done" once every question is answered. Tommy drafts the questions, you approve. |
+| Tasks | Question-driven: a task is a question seeking an answer. Each task carries sub-questions with answers + evidence; it is only "done" once every question is answered. Tommy drafts the questions, you approve — and Tommy can also add, answer, reopen, show and **execute** a task's questions himself when you ask. |
 | Notes | Create, edit, pin, delete, full-text search |
-| Projects | Discover repositories in `cloned_repos`, read git state, score health, and surface a **Run** link for any deployed app, executable, web/dashboard or desktop build it finds |
+| Projects | Auto-discovers the `cloned_repos` folder (works from the source checkout *and* an installed binary) and scans it on every run, reading git state, scoring health, and surfacing a **Run** link for any deployed app, executable, web/dashboard or desktop build |
 | Calendar | Month view built from task occurrences and due dates |
 | Launchers | Named argv profiles per project with a whitelisted environment and no shell |
-| Assistant | **Tommy** — local Ollama first, deterministic keyword fallback, optional cloud providers. Always shows its thinking and token usage. |
+| Assistant | **Tommy** — local Ollama first, deterministic keyword fallback, optional cloud providers. Always shows its thinking and token usage. Tommy has a **coding workspace**: ask him to build a webapp/app/site and he scaffolds a runnable project under `cloned_repos` (with a Run link) and edits files, instead of refusing. |
 | Skills | Tommy auto-loads a fixed set of skills into every model call (frontend/webapp, UI design, DevOps, prompt engineering, `i-have-adhd` and your personal `Hatem_specific`), so they apply to any model, local or cloud |
 | Reminders | Persisted scheduler, notification inbox, alarm state machine (snooze, dismiss, reschedule) |
 | Audit | Append-only SHA-256 hash chain over every mutation, with verification |

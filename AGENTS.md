@@ -97,5 +97,10 @@ migration tests (`tests/core/test_migrations.py`) and extend
 - Model mode (Local/Cloud/Hybrid) and API keys are managed in the web UI
   **Settings** view (⚙️). The mode persists to `~/.config/sigmahelix/config.yaml`
   and is reloaded on startup; keys go to the OS keyring only, never to config.
+- `projects_dir()` must keep discovering `cloned_repos` when there is no source
+  checkout sibling (installed binaries); do not revert it to `~/projects`.
+- Tommy's question-task actions and `create_project` are deterministic and must
+  keep working without a model. A build request must scaffold real files — never
+  answer it with a refusal.
 - Run the gate before declaring work done; if a test fails, fix the code or the
   test's stale assumption, but never delete or disable tests to make it pass.

@@ -158,6 +158,127 @@ class TasksManager:
         self.set_pinned(task_id, False)
         return "Task ID {} unpinned: {}.".format(task_id, task["name"])
 
+    # ---- question-driven tasks ------------------------------------------
+    @staticmethod
+    def _task_and_question_ids(text: str) -> tuple[int | None, int | None]:
+        task_m = re.search(r"task\s+(\d+)", text, re.I)
+        question_m = re.search(r"question\s+(\d+)", text, re.I)
+        task_id = int(task_m.group(1)) if task_m else _id_from(text)
+        question_id = int(question_m.group(1)) if question_m else None
+        return task_id, question_id
+
+    @staticmethod
+    def _question_text(text: str) -> str:
+        if ":" in text:
+            return text.split(":", 1)[1].strip()
+        # Remove a leading command phrase ("add question to task 3",
+        # "answer question 1 on task 3") so only the payload remains.
+        stripped = re.sub(
+            r"(?i)^\s*(?:please\s+)?(?:add|create|new|answer|reopen)\s+"
+            r"(?:a\s+)?(?:sub-?)?question(?:\s+\d+)?\s*"
+            r"(?:to|for|on)?\s*(?:task\s+\d+)?\s*",
+            "",
+            text,
+        )
+        return stripped.strip(" :,-")
+
+    def create_task_with_questions(self, title: str, questions: list[str]) -> str:
+        """Create a task together with its first set of questions."""
+        title = clean_content(title) or (title or "").strip()
+        if not title:
+            return "Please provide a task title."
+        task = self.service.create_task(title)
+        added = []
+        for q in questions:
+            q = (q or "").strip()
+            if q:
+                rec = self.service.add_question(task["id"], q)
+                if rec is not None:
+                    added.append(rec["id"])
+        return (
+            f"Task '{title}' created (ID {task['id']}) with {len(added)} "
+            f"question(s): {added}."
+        )
+
+    def add_question(self, text: str) -> str:
+        """Add a sub-question to a task, e.g. 'add question to task 3: ...'."""
+        task_id, _ = self._task_and_question_ids(text)
+        if task_id is None:
+            return "Specify a task, e.g. 'add question to task 3: what is X?'"
+        question = self._question_text(text)
+        if not question:
+            return "Please include the question text after a colon."
+        rec = self.service.add_question(task_id, question)
+        if rec is None:
+            return f"Task ID {task_id} not found."
+        return f"Question {rec['id']} added to task {task_id}: {question}"
+
+    def answer_question(self, text: str) -> str:
+        """Answer a sub-question, e.g. 'answer question 1 on task 3: ...'."""
+        task_id, question_id = self._task_and_question_ids(text)
+        if task_id is None:
+            return "Specify a task, e.g. 'answer question 1 on task 3: ...'"
+        if question_id is None:
+            pending = self.pending_questions(task_id)
+            if not pending:
+                return f"Task {task_id} has no open questions."
+            question_id = pending[0]["id"]
+        answer = self._question_text(text)
+        if not answer:
+            return "Please include the answer text after a colon."
+        try:
+            rec = self.service.answer_question(
+                task_id, question_id, answer, "answered via Tommy"
+            )
+        except ValueError as exc:
+            return str(exc)
+        if rec is None:
+            return "Task or question not found."
+        return f"Question {question_id or rec['id']} on task {task_id} answered."
+
+    def reopen_question(self, text: str) -> str:
+        """Reopen a sub-question so it can be re-answered."""
+        task_id, question_id = self._task_and_question_ids(text)
+        if task_id is None:
+            return "Specify a task, e.g. 'reopen question 1 on task 3'."
+        if question_id is None:
+            return "Specify which question, e.g. 'reopen question 1 on task 3'."
+        rec = self.service.reopen_question(task_id, question_id)
+        if rec is None:
+            return "Task or question not found."
+        return f"Question {question_id or rec['id']} on task {task_id} reopened."
+
+    def show_questions(self, text: str) -> str:
+        """List a task's questions and their answers."""
+        task_id, _ = self._task_and_question_ids(text)
+        if task_id is None:
+            return "Specify a task, e.g. 'show questions for task 3'."
+        task = self.find(task_id)
+        if task is None:
+            return f"Task ID {task_id} not found."
+        questions = task.get("questions") or []
+        if not questions:
+            return f"Task {task_id} '{task['name']}' has no questions yet."
+        total = task.get("questions_total", len(questions))
+        answered = task.get("questions_answered", 0)
+        lines = [f"Task {task_id} '{task['name']}' ({answered}/{total} answered):"]
+        for q in questions:
+            state = "✓" if q.get("status") == "answered" else "•"
+            line = f"  {state} Q{q['id']}: {q['question']}"
+            if q.get("answer"):
+                line += f"\n      A: {q['answer']}"
+            lines.append(line)
+        return "\n".join(lines)
+
+    def pending_questions(self, task_id: int) -> list[dict[str, Any]]:
+        """Open questions for a task (used when Tommy executes a task)."""
+        task = self.find(task_id)
+        if task is None:
+            return []
+        return [
+            q for q in (task.get("questions") or []) if q.get("status") != "answered"
+        ]
+
 
 _PREFIX_TOKENS = {
     "please",
@@ -414,6 +535,87 @@ class ProjectsManager:
             )
 
         return result
+
+    def create_project(self, name: str, kind: str = "webapp") -> dict[str, Any]:
+        """Scaffold a real, runnable project under the projects directory.
+
+        The new folder is a proven project (it carries ``index.html`` / a
+        manifest), so it shows up in Projects and earns a Run link. Tommy uses
+        this as his coding space: when you ask for a webapp he builds it here
+        instead of refusing.
+        """
+        base = Path(self.projects_dir)
+        safe = _slug(name) or "new-project"
+        target = base / safe
+        if target.exists():
+            return {
+                "ok": False,
+                "message": f"{safe} already exists",
+                "path": str(target),
+            }
+        target.mkdir(parents=True, exist_ok=True)
+        files = _scaffold_webapp(name)
+        for rel, content in files.items():
+            (target / rel).write_text(content, encoding="utf-8")
+        return {
+            "ok": True,
+            "name": safe,
+            "path": str(target),
+            "files": list(files),
+            "message": f"Built '{safe}' in {target}",
+        }
+
+
+def _slug(text: str) -> str:
+    """Turn a project name into a filesystem-safe slug."""
+    cleaned = re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")
+    return cleaned or "project"
+
+
+def _scaffold_webapp(name: str) -> dict[str, str]:
+    """A small but real static webapp — open ``index.html`` to run it."""
+    title = (name or "My App").strip() or "My App"
+    return {
+        "index.html": (
+            "<!DOCTYPE html>\n"
+            '<html lang="en">\n'
+            "  <head>\n"
+            '    <meta charset="utf-8" />\n'
+            '    <meta name="viewport" content="width=device-width, initial-scale=1" />\n'
+            f"    <title>{title}</title>\n"
+            '    <link rel="stylesheet" href="style.css" />\n'
+            "  </head>\n"
+            "  <body>\n"
+            f'    <main class="app">\n'
+            f"      <h1>{title}</h1>\n"
+            "      <p>This app was scaffolded by Tommy. Edit it freely.</p>\n"
+            '      <button id="action">Click me</button>\n'
+            '      <p id="output"></p>\n'
+            "    </main>\n"
+            '    <script src="app.js"></script>\n'
+            "  </body>\n"
+            "</html>\n"
+        ),
+        "style.css": (
+            ":root { color-scheme: light dark; }\n"
+            "body { font-family: system-ui, sans-serif; margin: 0; "
+            "display: grid; place-items: center; min-height: 100vh; }\n"
+            ".app { text-align: center; }\n"
+            "button { font-size: 1rem; padding: 0.6rem 1rem; "
+            "border-radius: 8px; border: 0; background: #4f46e5; color: #fff; "
+            "cursor: pointer; }\n"
+            "#output { margin-top: 1rem; font-weight: 600; }\n"
+        ),
+        "app.js": (
+            'const btn = document.getElementById("action");\n'
+            'const out = document.getElementById("output");\n'
+            "let count = 0;\n"
+            'btn.addEventListener("click", () => {\n'
+            "  count += 1;\n"
+            "  out.textContent = `Clicked ${count} time(s).`;\n"
+            "});\n"
+        ),
+    }
 
 
 class CalendarManager:

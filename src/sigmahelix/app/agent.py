@@ -163,13 +163,35 @@ CORE PERSONA - ALWAYS:
 
 OUTPUT FORMAT:
 - Respond ONLY with compact JSON, no markdown:
-  {"action": "<create_task|list_tasks|complete_task|delete_task|pin_task|unpin_task|
-              create_note|list_notes|edit_note|delete_note|pin_note|unpin_note|
-              list_projects|explore|calendar|launch|chat|help>",
+  {"action": "<create_task|create_task_with_questions|list_tasks|complete_task|
+              delete_task|pin_task|unpin_task|add_question|answer_question|
+              reopen_question|show_questions|execute_task|create_note|
+              list_notes|edit_note|delete_note|pin_note|unpin_note|
+              list_projects|explore|calendar|launch|create_project|
+              file_operations|chat|help>",
    "content": "<needed args, empty if none>",
    "reply": "<short friendly answer to show/spell out for the user>"}
 
 RULES:
+- You are a DOER. When the user asks you to build, create, or make a webapp,
+  app, website, script, or anything on disk, you MUST use create_project or
+  file_operations to actually write the files — never say you cannot do it here.
+  Projects are written under the projects directory and show a Run link.
+- Tasks are question-driven. A task is only "ready" once every sub-question has
+  an answer+evidence. You CAN create tasks with questions, add questions to a
+  task, answer questions, reopen them, show them, and EXECUTE a task (answer all
+  its open questions using your reasoning, then complete it). Use these actions;
+  they are real and available to you.
+- create_task_with_questions: content = "TITLE" on the first line, then one
+  question per following line (separate lines or "||").
+- add_question: content = "to task <id>: <question text>".
+- answer_question: content = "question <qid> on task <id>: <answer>".
+- show_questions: content = "task <id>".
+- execute_task: content = "task <id>" — you answer the open questions yourself.
+- create_project: content = the project name/description. You scaffold a runnable
+  app there; follow up with file_operations to add or edit files.
+- file_operations: content = JSON {"operation":"create|read|modify",
+  "path":"<relative path in the project>", "content":"<text for create/modify>"}.
 - Decide NOTE vs TASK by what the user wants, not by which words appear:
   * create_task  = something to DO later: a duty, reminder, deadline, errand,
     "remind me…", "remember to…", "call X at 4pm", "review the report Friday",
@@ -311,9 +333,19 @@ class Agent:
         if direct is not None:
             return direct
 
+        # Question-driven task commands are deterministic: they must never
+        # depend on the model remembering that it is allowed to do them.
+        task_route = self._task_build_route(raw)
+        if task_route is not None:
+            return task_route
+
         if self.llm_available:
             result = self._llm_roundtrip(raw)
             if result is not None:
+                # A refusal is never acceptable when the user asked us to build:
+                # scaffold the project for real instead of apologising.
+                if self._looks_like_build(raw) and self._is_refusal(result):
+                    return self._handle_create_project("", raw)
                 return result
 
         # LLM unavailable/failed -> deterministic router
@@ -648,6 +680,20 @@ class Agent:
             return "Which app to launch? 'launch study studio' or 'launch ld command center'."
         if action == "help":
             return self._default_help()
+        if action == "create_task_with_questions":
+            return self._handle_create_task_with_questions(args_text, original_text)
+        if action == "add_question":
+            return self.tasks.add_question(args_text or original_text)
+        if action == "answer_question":
+            return self.tasks.answer_question(args_text or original_text)
+        if action == "reopen_question":
+            return self.tasks.reopen_question(args_text or original_text)
+        if action == "show_questions":
+            return self.tasks.show_questions(args_text or original_text)
+        if action == "execute_task":
+            return self.execute_task(args_text or original_text)
+        if action == "create_project":
+            return self._handle_create_project(args_text, original_text)
         if action == "web_search":
             return self._handle_web_search(args_text, original_text)
         if action == "file_operations":
@@ -658,6 +704,174 @@ class Agent:
             return self._handle_upload_skills(args_text, original_text)
         # chat or unknown -> use reply text from LLM (caller handles)
         return None
+
+    # ---- question-driven tasks + coding workspace -------------------------
+    @staticmethod
+    def _task_id_from(text: str) -> int | None:
+        match = re.search(r"task\s+(\d+)", text or "", re.I)
+        if match:
+            return int(match.group(1))
+        match = re.search(r"\d+", text or "")
+        return int(match.group()) if match else None
+
+    def _task_build_route(self, text: str):
+        """Deterministic task-question commands that bypass the model.
+
+        Returns a reply string, or None to continue to the model/fallback.
+        """
+        low = (text or "").lower()
+        has_task = re.search(r"\btask\s+\d+", low) is not None
+        has_question = re.search(r"\bquestion\s+\d+", low) is not None
+        if "question" in low and (has_task or has_question):
+            if any(w in low for w in ("execute", "answer", "fill", "resolve")):
+                return (
+                    self.tasks.answer_question(text)
+                    if ":" in text
+                    else self.execute_task(text)
+                )
+            if any(w in low for w in ("show", "list", "view", "what")):
+                return self.tasks.show_questions(text)
+            if "reopen" in low:
+                return self.tasks.reopen_question(text)
+            if any(w in low for w in ("add", "create", "new")):
+                return self.tasks.add_question(text)
+        if has_task and any(w in low for w in ("execute", "work on", "run")):
+            return self.execute_task(text)
+        return None
+
+    _BUILD_PATTERN = re.compile(
+        r"\b(create|build|make|scaffold|generate|develop)\b.*\b"
+        r"(web\s*app|webapp|website|site|app|project|page|script|tool|dashboard)\b",
+        re.I,
+    )
+    _REFUSALS = (
+        "i can't",
+        "i cannot",
+        "i can not",
+        "i'm unable",
+        "i am unable",
+        "not able to",
+        "can't do that",
+        "cannot do that",
+        "can't create",
+        "cannot create",
+        "don't have the ability",
+        "do not have the ability",
+    )
+
+    def _looks_like_build(self, text: str) -> bool:
+        return bool(self._BUILD_PATTERN.search(text or ""))
+
+    def _is_refusal(self, text: str) -> bool:
+        low = (text or "").lower()
+        return any(phrase in low for phrase in self._REFUSALS)
+
+    def _handle_create_task_with_questions(self, args_text, original_text):
+        """Create a task and its questions from 'TITLE' + one question per line."""
+        content = (args_text or original_text or "").strip()
+        if not content:
+            return "Tell me the task title and its questions."
+        parts = [
+            part.strip()
+            for part in re.split(r"\n+|\s*\|\|\s*", content)
+            if part.strip()
+        ]
+        title = parts[0] if parts else content
+        questions = parts[1:]
+        return self.tasks.create_task_with_questions(title, questions)
+
+    def execute_task(self, text: str) -> str:
+        """Answer every open question on a task with the model, then complete it."""
+        task_id = self._task_id_from(text)
+        if task_id is None:
+            return "Which task? Say 'execute task 3'."
+        task = self.tasks.find(task_id)
+        if task is None:
+            return f"Task ID {task_id} not found."
+        pending = self.tasks.pending_questions(task_id)
+        if not pending:
+            return f"Task {task_id} has no open questions."
+        answered = 0
+        for question in pending:
+            prompt = (
+                f"Task: {task['name']}\n"
+                f"Question {question['id']}: {question['question']}\n\n"
+                "Answer this question concretely and concisely. If you do not "
+                "know, state what is missing instead of inventing facts."
+            )
+            try:
+                answer = self._ask_text(prompt)
+            except Exception:  # noqa: BLE001 - a failed answer must not abort
+                answer = None
+            if not answer:
+                continue
+            try:
+                self.tasks.service.answer_question(
+                    task_id, question["id"], answer, "answered by Tommy"
+                )
+                answered += 1
+            except Exception:  # noqa: BLE001 - skip an individual failure
+                continue
+        if not answered:
+            return (
+                "Tommy couldn't answer the open questions without a model "
+                "connection. Connect a model, or answer them in the task view."
+            )
+        remaining = len(self.tasks.pending_questions(task_id))
+        message = f"Tommy answered {answered} question(s) on task {task_id}."
+        if remaining == 0:
+            try:
+                self.tasks.service.set_task_done(task_id, True, force=True)
+                message += " All questions answered — task marked done."
+            except Exception:  # noqa: BLE001 - completion is best-effort
+                pass
+        else:
+            message += f" {remaining} still open."
+        return message
+
+    def _ask_text(self, prompt: str, timeout: int = 60) -> str | None:
+        """Get a plain-text completion for a one-off question (never JSON)."""
+        messages = [
+            {
+                "role": "system",
+                "content": "You are Tommy. Answer in plain text only, no JSON.",
+            },
+            {"role": "user", "content": prompt},
+        ]
+        if self.model_kind in ("cloud", "hybrid"):
+            reply, _ = self._cloud_chat(messages, timeout=timeout)
+            if reply:
+                return str(reply).strip()
+        try:
+            reply = self._ollama_chat(messages, timeout=timeout)
+        except Exception:  # noqa: BLE001 - offline is a normal outcome
+            return None
+        return str(reply).strip() if reply else None
+
+    def _handle_create_project(self, args_text, original_text):
+        """Build a runnable project in the workspace instead of refusing."""
+        name = (args_text or original_text or "").strip()
+        name = re.sub(r"(?i)^(please\s+)?(can\s+you\s+|could\s+you\s+)?", "", name)
+        name = re.sub(
+            r"(?i)^(create|build|make|scaffold|generate|develop)\s+"
+            r"(me\s+)?(a|an|the)?\s*",
+            "",
+            name,
+        )
+        name = re.sub(
+            r"(?i)\b(web\s*app|webapp|website|site|app|project|page|script|tool)\b",
+            "",
+            name,
+        ).strip(" .,:-")
+        result = self.projects.create_project(name or "tommy-app")
+        if not result.get("ok"):
+            return f"⚠️ {result['message']}"
+        return (
+            f"✅ Built '{result['name']}' at {result['path']}\n"
+            f"Files: {', '.join(result['files'])}\n"
+            "Open Projects and press Run to launch it. "
+            "Tell me what to add and I'll edit the files."
+        )
 
     def _handle_web_search(self, args_text, original_text):
         """Handle web search skill."""
@@ -835,6 +1049,15 @@ class Agent:
         d = self._direct_route(text)
         if d is not None:
             return d
+
+        # Question-driven task commands (offline path).
+        task_route = self._task_build_route(original)
+        if task_route is not None:
+            return task_route
+
+        # Building a project offline: actually scaffold it, never refuse.
+        if self._looks_like_build(text):
+            return self._handle_create_project("", original)
 
         intent = classify_intent(text)
 
