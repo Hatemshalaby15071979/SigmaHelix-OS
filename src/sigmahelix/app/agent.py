@@ -20,6 +20,7 @@ import threading
 import urllib.error
 import urllib.parse
 import urllib.request
+from pathlib import Path
 from typing import Any
 
 from .managers import (
@@ -564,11 +565,17 @@ class Agent:
                     action = "chat"
 
                 executed = self._execute(action, args_text, user_text)
-                out = f"🤖 {reply}" if reply else executed
-                if reply and executed and executed != reply:
-                    out = f"🤖 {reply}\n{executed}"
+                # A tool result is the answer. The model's one-line preamble
+                # ("Launching X now…") is noise in front of the real evidence,
+                # so only plain chat keeps the model's own words.
+                if action == "chat" and reply:
+                    out = f"🤖 {reply}"
+                elif executed:
+                    out = executed
+                else:
+                    out = f"🤖 {reply}" if reply else "Done."
                 self._remember("user", user_text)
-                self._remember("assistant", reply or executed)
+                self._remember("assistant", out)
                 return out
             except urllib.error.URLError:
                 self.llm_available = False
@@ -665,12 +672,7 @@ class Agent:
                 scope = "today"
             return self.calendar.get_tasks_for_date(scope)
         if action == "launch":
-            target = (args_text or t).lower()
-            if "study" in target:
-                return self.launcher.launch_study_studio(original_text)
-            if "command" in target or "l-d" in target or "ld" in target:
-                return self.launcher.launch_ld_command_center(original_text)
-            return "Which app to launch? 'launch study studio' or 'launch ld command center'."
+            return self._handle_launch(args_text or original_text, original_text)
         if action == "help":
             return self._default_help()
         if action == "create_task_with_questions":
@@ -764,6 +766,19 @@ class Agent:
             if not self.plugins.is_enabled("web"):
                 return self.plugins.off_message("web")
             return self._handle_fetch_url(url.group(0), text)
+        verb = re.match(
+            r"^(?:please\s+|tommy[,\s]+|can\s+you\s+|could\s+you\s+)?"
+            r"(launch|start|bring\s+up|fire\s+up|run|open)\s+(.+)$",
+            (text or "").strip(),
+            re.IGNORECASE,
+        )
+        if verb:
+            if not self.plugins.is_enabled("launch"):
+                return self.plugins.off_message("launch")
+            loud = verb.group(1).lower() in ("launch", "start", "bring up", "fire up")
+            handled = self._handle_launch(text, text, silent=not loud)
+            if handled is not None:
+                return handled
         if (
             "production ready" in low
             or "production-readiness" in low
@@ -1153,6 +1168,135 @@ class Agent:
         records = tools.assess_all(self._workspace_root(), rows)
         return tools.format_assessment(records)
 
+    # ---- launching -------------------------------------------------------
+    def _launch_target(self, text):
+        """Turn 'launch Helix codex app' into 'Helix codex'."""
+        cleaned = re.sub(
+            r"^(?:please\s+|tommy[,\s]+|can\s+you\s+|could\s+you\s+|"
+            r"would\s+you\s+|i\s+want\s+to\s+|let'?s\s+)*",
+            "",
+            text.strip(),
+            flags=re.IGNORECASE,
+        )
+        cleaned = re.sub(
+            r"^(?:launch|run|start|open|bring\s+up|fire\s+up)\s+",
+            "",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+        cleaned = re.sub(
+            r"\s+(?:app|application|dashboard|web\s*app|webapp|website|site|"
+            r"project|repo|now|please)$",
+            "",
+            cleaned,
+            flags=re.IGNORECASE,
+        )
+        return cleaned.strip(" .!?\"'")
+
+    def _handle_launch(self, args_text, original_text, silent=False):
+        """Resolve any project by name, detect its interface, and start it.
+
+        No hardcoded app names: the target is matched against the projects on
+        disk and the command comes from what the project actually contains.
+        """
+        from .launchables import Launchable, detect_launchables, index_html, launch
+        from .paths import projects_dir
+        from .projects import list_project_dirs, match_projects
+
+        target = self._launch_target(args_text or "") or self._launch_target(
+            original_text
+        )
+        matches = match_projects(target)
+        if not matches:
+            if silent:
+                return None
+            names = list_project_dirs()
+            self.last_trace = {
+                **self.last_trace,
+                "thinking": (
+                    f"No project name matched {target!r}. I compared it against "
+                    f"{len(names)} real project directories."
+                ),
+            }
+            listed = ", ".join(names[:12]) + (" …" if len(names) > 12 else "")
+            return (
+                f"I couldn't match “{target}” to a project. Projects I can see: "
+                f"{listed}.\nSay e.g. 'launch Helix codex'."
+            )
+
+        if len(matches) > 1:
+            self.last_trace = {
+                **self.last_trace,
+                "thinking": (
+                    f"{target!r} matches {len(matches)} projects: "
+                    f"{', '.join(matches)}. Asking instead of guessing."
+                ),
+            }
+            return "Which one? " + " · ".join(matches)
+
+        name = matches[0]
+        project = Path(projects_dir()) / name
+        items = detect_launchables(project)
+        page = index_html(project)
+
+        if items:
+            best = items[0]
+            ok, message = launch(best, terminal=best.kind in ("web", "service"))
+            kinds = ", ".join(item.kind for item in items)
+            self.last_trace = {
+                **self.last_trace,
+                "thinking": (
+                    f"Matched “{target}” → {name}. Found {len(items)} runnable "
+                    f"entr{'y' if len(items) == 1 else 'ies'} ({kinds}); starting "
+                    f"{best.label} via {best.command[0]}."
+                ),
+            }
+            if not ok:
+                return f"▶ {name}: {message}"
+            tail = (
+                f"\nThe {page.name} page is also in the Projects view."
+                if page is not None
+                else ""
+            )
+            return f"▶ {name}: {message}.{tail}"
+
+        if page is not None:
+            _, message = launch(
+                Launchable(
+                    project=name,
+                    kind="dashboard",
+                    label=page.name,
+                    path=page,
+                    command=("xdg-open", str(page)),
+                )
+            )
+            self.last_trace = {
+                **self.last_trace,
+                "thinking": (
+                    f"Matched “{target}” → {name}. No app entry point, but it has "
+                    f"{page.name}; opening it in the browser."
+                ),
+            }
+            return f"▶ {name}: {message}"
+
+        manifests = (
+            ", ".join(sorted(p.name for p in project.iterdir() if p.is_file()))[:200]
+            or "none"
+        )
+        self.last_trace = {
+            **self.last_trace,
+            "thinking": (
+                f"Matched “{target}” → {name}, but found no AppImage, desktop "
+                "entry, npm script, Streamlit, FastAPI, Flask or index.html."
+            ),
+        }
+        return (
+            f"“{name}” has no interface I can start yet. I looked for an AppImage, "
+            "a .desktop entry, an npm dev/start script, a Streamlit app, a "
+            "FastAPI/Flask entry point and an index.html — none found.\n"
+            f"Top-level files: {manifests}"
+        )
+
     def _handle_create_document(self, args_text, original_text):
         """Write a real PDF document into the workspace."""
         import json
@@ -1383,13 +1527,20 @@ class Agent:
             if off := self._off("projects"):
                 return off
             return self.projects.list_projects(text)
-        if "launch" in text or "open" in text:
+        if "launch" in text or "open" in text or re.search(r"\brun\b", text):
             if off := self._off("launch"):
                 return off
-            if "study" in text:
-                return self.launcher.launch_study_studio(text)
-            if "l-d" in text or "command center" in text or "ld" in text:
-                return self.launcher.launch_ld_command_center(text)
+            explicit = bool(
+                re.match(
+                    r"^(?:please\s+|tommy[,\s]+)?"
+                    r"(?:launch|run|start|open|bring\s+up|fire\s+up)\b",
+                    original,
+                    re.IGNORECASE,
+                )
+            )
+            handled = self._handle_launch(original, original, silent=not explicit)
+            if handled is not None:
+                return handled
 
         # greetings + fallback
         if re.match(

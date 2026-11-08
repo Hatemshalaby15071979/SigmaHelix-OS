@@ -339,15 +339,43 @@
   }
 
   // ---------- projects ----------
+  function projectHref(project, rel) {
+    const safePath = rel.split("/").map(encodeURIComponent).join("/");
+    return `/project/${encodeURIComponent(project)}/${safePath}?t=${encodeURIComponent(TOKEN)}`;
+  }
+
+  async function launchProject(name, index, terminal) {
+    try {
+      const result = await post("/api/launch", { project: name, index, terminal });
+      setStatus(result.message, !result.ok);
+    } catch (error) {
+      setStatus(error.message, true);
+    }
+  }
+
   function renderProjects() {
     const grid = $("#project-list");
     grid.replaceChildren();
     $("#project-count").textContent = state.projects.length;
     for (const project of state.projects) {
       const card = el("article", "card");
+      const indexRel = project.index || null;
+      const indexHref = indexRel ? projectHref(project.name, indexRel) : null;
+
       const head = el("header");
       head.appendChild(el("span", `dot ${project.health === "ok" ? "ok" : project.health === "needs_attention" ? "warn" : "bad"}`));
-      head.appendChild(el("h3", null, project.name));
+      const title = el("h3");
+      if (indexHref) {
+        const link = el("a", "project-link", project.name);
+        link.href = indexHref;
+        link.target = "_blank";
+        link.rel = "noopener";
+        link.title = `Open ${indexRel}`;
+        title.appendChild(link);
+      } else {
+        title.textContent = project.name;
+      }
+      head.appendChild(title);
       head.appendChild(el("span", "score", String(project.score)));
       card.appendChild(head);
 
@@ -361,25 +389,36 @@
 
       const runs = el("div", "runs");
       const launchables = project.launchables || [];
-      if (!launchables.length) {
-        runs.appendChild(el("span", "none", "no runnable build yet"));
-      }
-      launchables.forEach((item, index) => {
-        const link = el("button", "run-link", `▶ ${item.label}`);
-        link.title = item.command;
-        link.addEventListener("click", async () => {
-          link.disabled = true;
-          try {
-            const result = await post("/api/launch", { project: project.name, index });
-            setStatus(result.message, !result.ok);
-          } catch (error) {
-            setStatus(error.message, true);
-          } finally {
-            link.disabled = false;
-          }
+      if (launchables.length) {
+        launchables.forEach((item, index) => {
+          const link = el("a", index === 0 ? "run-link primary" : "run-link", index === 0 ? "▶ Run" : `▶ ${item.label}`);
+          link.href = "#";
+          link.title = `${item.kind} · ${item.command}`;
+          link.addEventListener("click", (event) => {
+            event.preventDefault();
+            launchProject(project.name, index, item.kind === "web" || item.kind === "service");
+          });
+          runs.appendChild(link);
         });
+      } else if (indexHref) {
+        const link = el("a", "run-link primary", "▶ Run");
+        link.href = indexHref;
+        link.target = "_blank";
+        link.rel = "noopener";
+        link.title = `No app to start — open ${indexRel}`;
         runs.appendChild(link);
-      });
+      } else {
+        runs.appendChild(el("span", "none", "no interface detected"));
+      }
+
+      if (indexHref) {
+        const page = el("a", "page-link", indexRel);
+        page.href = indexHref;
+        page.target = "_blank";
+        page.rel = "noopener";
+        page.title = "Open this page in a new tab";
+        runs.appendChild(page);
+      }
       card.appendChild(runs);
       grid.appendChild(card);
     }

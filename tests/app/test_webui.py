@@ -302,3 +302,65 @@ def test_plugins_rejects_unknown_and_always_on(settings_server):
     with pytest.raises(urllib.error.HTTPError) as exc:
         call(base, "/api/plugins/toggle", token, {"id": "core", "enabled": False})
     assert exc.value.code == 400
+
+
+def test_project_page_is_served_with_its_assets(settings_server, tmp_path, monkeypatch):
+    base, token, _ = settings_server
+    root = tmp_path / "cloned_repos"
+    demo = root / "Demo"
+    demo.mkdir(parents=True)
+    (demo / "index.html").write_text(
+        "<html><link rel=stylesheet href=style.css></html>"
+    )
+    (demo / "style.css").write_text("body { color: red; }")
+    monkeypatch.setenv("SIGMAHELIX_PROJECTS_DIR", str(root))
+
+    status, body = call(base, f"/project/Demo/index.html?t={token}")
+    assert status == 200
+    assert "<html>" in body
+
+    status, body = call(base, f"/project/Demo/style.css?t={token}")
+    assert status == 200
+    assert "color: red" in body
+
+
+def test_project_page_needs_the_token(settings_server, tmp_path, monkeypatch):
+    base, _, _ = settings_server
+    root = tmp_path / "cloned_repos"
+    (root / "Demo").mkdir(parents=True)
+    (root / "Demo" / "index.html").write_text("<html>demo</html>")
+    monkeypatch.setenv("SIGMAHELIX_PROJECTS_DIR", str(root))
+
+    with pytest.raises(urllib.error.HTTPError) as exc:
+        call(base, "/project/Demo/index.html")
+    assert exc.value.code == 403
+
+
+def test_project_page_cannot_escape_its_folder(settings_server, tmp_path, monkeypatch):
+    base, token, _ = settings_server
+    root = tmp_path / "cloned_repos"
+    (root / "Demo").mkdir(parents=True)
+    (root / "Demo" / "index.html").write_text("<html>demo</html>")
+    monkeypatch.setenv("SIGMAHELIX_PROJECTS_DIR", str(root))
+
+    with pytest.raises(urllib.error.HTTPError) as exc:
+        call(base, f"/project/Demo/%2e%2e%2f%2e%2e%2fetc%2fpasswd?t={token}")
+    assert exc.value.code == 404
+
+
+def test_state_reports_index_and_runnable_for_each_project(
+    settings_server, tmp_path, monkeypatch
+):
+    base, token, _ = settings_server
+    root = tmp_path / "cloned_repos"
+    demo = root / "Demo"
+    demo.mkdir(parents=True)
+    (demo / "pyproject.toml").write_text("[project]\nname = 'demo'\n")
+    (demo / "index.html").write_text("<html>demo</html>")
+    monkeypatch.setenv("SIGMAHELIX_PROJECTS_DIR", str(root))
+
+    status, body = call(base, "/api/state", token)
+    assert status == 200
+    project = next(p for p in json.loads(body)["projects"] if p["name"] == "Demo")
+    assert project["index"] == "index.html"
+    assert project["launchables"][0]["kind"] == "dashboard"

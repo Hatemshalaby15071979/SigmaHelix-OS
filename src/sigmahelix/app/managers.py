@@ -14,7 +14,7 @@ from typing import Any
 from ..core.storage.repositories import RepositoryOperationError
 from .paths import data_dir as paths_data_dir
 from .paths import projects_dir as _projects_dir
-from .projects import PROJECTS_DIR, list_project_dirs
+from .projects import list_project_dirs
 from .service import AppService
 
 
@@ -477,7 +477,7 @@ class ProjectsManager:
 
     def __init__(self, service: AppService | None = None) -> None:
         self.service = service or AppService()
-        self.projects_dir = PROJECTS_DIR
+        self.projects_dir = str(_projects_dir())
 
     def scan(self) -> list[dict[str, Any]]:
         """Scan every proven project and report git state, health and runners."""

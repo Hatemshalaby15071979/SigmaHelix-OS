@@ -23,7 +23,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from ...core.storage.repositories import RepositoryOperationError
 from ..service import AppService
@@ -94,12 +94,15 @@ class AppState:
             return []
 
     def _projects(self) -> list[dict[str, Any]]:
-        from ..launchables import detect_launchables
+        from ..launchables import detect_launchables, index_html
 
         rows = self.service.scan_projects()
         for row in rows:
-            items = detect_launchables(Path(row["path"]))
+            project = Path(row["path"])
+            items = detect_launchables(project)
             row["launchables"] = [item.as_dict() for item in items]
+            page = index_html(project)
+            row["index"] = str(page.relative_to(project)) if page is not None else None
         return rows
 
     # ---- write -----------------------------------------------------------
@@ -111,7 +114,9 @@ class AppState:
             "model": self.agent.model_name,
         }
 
-    def launch(self, project: str, index: int) -> dict[str, Any]:
+    def launch(
+        self, project: str, index: int, terminal: bool | None = None
+    ) -> dict[str, Any]:
         from ..launchables import detect_launchables, launch
         from ..paths import projects_dir
         from ..security import confine_to_root
@@ -123,8 +128,29 @@ class AppState:
         items = detect_launchables(root)
         if index < 0 or index >= len(items):
             return {"ok": False, "message": "that link is stale — refresh"}
-        ok, message = launch(items[index])
+        ok, message = launch(items[index], terminal=terminal)
         return {"ok": ok, "message": message}
+
+    def project_file(self, project: str, rel: str) -> tuple[bytes, str] | None:
+        """One file from a project, served so its relative assets still load."""
+        import mimetypes
+
+        from ..paths import projects_dir
+        from ..security import confine_to_root
+
+        try:
+            root = confine_to_root(projects_dir(), project)
+            target = confine_to_root(root, rel)
+        except ValueError:
+            return None
+        if not target.is_file():
+            return None
+        try:
+            body = target.read_bytes()
+        except OSError:
+            return None
+        ctype, _ = mimetypes.guess_type(target.name)
+        return body, ctype or "application/octet-stream"
 
     def settings(self) -> dict[str, Any]:
         """Current model-mode + cloud key state for the Settings view."""
@@ -220,7 +246,9 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt: str, *args: object) -> None:  # noqa: A003
         return  # the console stays quiet; the UI shows its own errors
 
-    def _send(self, status: int, body: bytes, content_type: str) -> None:
+    def _send(
+        self, status: int, body: bytes, content_type: str, csp: str | None = None
+    ) -> None:
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
@@ -228,8 +256,11 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header(
             "Content-Security-Policy",
-            "default-src 'self'; style-src 'self' 'unsafe-inline'; "
-            "img-src 'self' data:; script-src 'self'",
+            csp
+            or (
+                "default-src 'self'; style-src 'self' 'unsafe-inline'; "
+                "img-src 'self' data:; script-src 'self'"
+            ),
         )
         self.end_headers()
         self.wfile.write(body)
@@ -268,6 +299,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._serve_index()
         if path.startswith("/static/"):
             return self._serve_static(path.removeprefix("/static/"))
+        if path.startswith("/project/"):
+            return self._serve_project(path, parse_qs(parsed.query))
         if path == "/api/state":
             if not self._authorised():
                 return self._error(HTTPStatus.FORBIDDEN, "bad token")
@@ -400,7 +433,14 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/launch":
             project = str(data.get("project") or "")
             index = int(data.get("index") or 0)
-            return self._json(self.state.launch(project, index))
+            terminal = data.get("terminal")
+            return self._json(
+                self.state.launch(
+                    project,
+                    index,
+                    terminal=None if terminal is None else bool(terminal),
+                )
+            )
 
         if path == "/api/skills/reload":
             count = self.state.agent.reload_skills()
@@ -442,6 +482,38 @@ class Handler(BaseHTTPRequestHandler):
             return self._error(HTTPStatus.INTERNAL_SERVER_ERROR, "missing index.html")
         html = html.replace("__SIGMAHELIX_TOKEN__", self.state.token)
         self._send(HTTPStatus.OK, html.encode(), "text/html; charset=utf-8")
+
+    def _serve_project(self, path: str, query: dict[str, list[str]]) -> None:
+        """Serve a project's own files so its index.html works with assets.
+
+        The page gets an opaque origin (CSP sandbox without allow-same-origin),
+        so a project's own JavaScript can never reach the app's API or read the
+        session token.
+        """
+        supplied = self.headers.get(TOKEN_HEADER, "")
+        if not supplied:
+            supplied = (query.get("t") or [""])[0]
+        if not secrets.compare_digest(supplied, self.state.token):
+            return self._error(HTTPStatus.FORBIDDEN, "bad token")
+
+        rest = path.removeprefix("/project/")
+        project, _, rel = rest.partition("/")
+        project, rel = unquote(project), unquote(rel)
+        if not project or not rel:
+            return self._error(HTTPStatus.NOT_FOUND, "not found")
+        served = self.state.project_file(project, rel)
+        if served is None:
+            return self._error(HTTPStatus.NOT_FOUND, "not found")
+        body, ctype = served
+        self._send(
+            HTTPStatus.OK,
+            body,
+            ctype,
+            csp=(
+                "sandbox allow-scripts allow-forms allow-popups allow-modals; "
+                "default-src 'self' data: blob: 'unsafe-inline' 'unsafe-eval'"
+            ),
+        )
 
     def _serve_static(self, name: str) -> None:
         if "/" in name or "\\" in name or name.startswith("."):

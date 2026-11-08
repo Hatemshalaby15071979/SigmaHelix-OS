@@ -121,5 +121,15 @@ migration tests (`tests/core/test_migrations.py`) and extend
 - **No persona pickers.** Tommy's traits (honest/practical, human tone,
   evidence-aware, doer) are always on together. Do not reintroduce a switch that
   makes them exclusive — the old `persona_style` control did nothing.
+- **No hardcoded app names.** `launch <anything>` must resolve the name against
+  the real projects (`projects.match_projects`) and start what the project
+  actually contains (`launchables.detect_launchables`). Never reintroduce a
+  fixed list of launchable apps or a "which app?" reply — an unknown name gets
+  the real project list, an ambiguous one gets a choice, and a project with no
+  interface says exactly what was looked for.
+- **Project pages are served, not linked as `file://`.** `/project/<name>/<path>`
+  serves files from the project folder (token in `?t=`, path-confined) with a
+  sandbox CSP so a project's JavaScript cannot reach the app API or read the
+  session token. Keep that CSP when touching the route.
 - Run the gate before declaring work done; if a test fails, fix the code or the
   test's stale assumption, but never delete or disable tests to make it pass.

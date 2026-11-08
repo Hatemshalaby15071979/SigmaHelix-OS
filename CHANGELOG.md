@@ -68,6 +68,25 @@ All notable changes to SigmaHelix are recorded here. The format follows
   and "evidence-aware" were mutually exclusive buttons that never changed the
   prompt. They are now one always-on identity in both the web UI and the Tk
   window.
+- **Every project has a Run link and a page link.** The Projects view now shows,
+  per project, a **▶ Run** action that starts whatever the project actually
+  contains (packaged app, desktop script, npm dev server, Streamlit, FastAPI,
+  Flask, compose) in a terminal so its log is visible, plus a link to its
+  `index.html`/`home.html` served from the project folder so its CSS and JS
+  still load. Clicking the project name opens the page too. Project pages are
+  served with a sandbox CSP, so their own JavaScript can never reach the app's
+  API or read the session token.
+- **Launch is no longer hardcoded.** "launch Helix codex app" resolves any real
+  project by fuzzy name, inspects what it contains, starts the best entry point,
+  and says what it matched and why. Unknown names get the real project list;
+  ambiguous names get a choice; projects with no interface say exactly what was
+  looked for instead of guessing.
+- **Interface detection covers real layouts.** HTML pages are found in
+  subfolders (`dashboard/`, `dist/`, `apps/web/`), vendored copies of other
+  projects and Jinja `templates/` are excluded, and Streamlit, FastAPI, Flask,
+  Django and tkinter/PyQt/pywebview entry points are detected at a bounded
+  depth. A missing runtime (e.g. `streamlit` not installed) is reported before
+  a window is opened.
 - **Real agent tools (`app/tools.py`).** Tommy can now `fetch_url` any public
   page and read its text (SSRF-guarded: localhost/private ranges are refused),
   `list`/`read`/`search`/`create`/`modify` any file inside `cloned_repos`

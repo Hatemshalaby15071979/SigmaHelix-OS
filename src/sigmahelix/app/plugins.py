@@ -237,7 +237,14 @@ PLUGINS: tuple[Plugin, ...] = (
         "Launchers",
         "Launch the configured apps.",
         "system",
-        (ActionSpec("launch", "Launch a named app."),),
+        (
+            ActionSpec(
+                "launch",
+                "content = a project name. Resolves it against the real projects, "
+                "detects its desktop app, npm/Streamlit/FastAPI/Flask server or "
+                "index.html, and starts it in a terminal.",
+            ),
+        ),
         permissions=("start local apps",),
     ),
     Plugin(

@@ -26,7 +26,7 @@ without a browser.
 | --- | --- |
 | Tasks | Question-driven: a task is a question seeking an answer. Each task carries sub-questions with answers + evidence; it is only "done" once every question is answered. Tommy drafts the questions, you approve — and Tommy can also add, answer, reopen, show and **execute** a task's questions himself when you ask. |
 | Notes | Create, edit, pin, delete, full-text search |
-| Projects | Auto-discovers the `cloned_repos` folder (works from the source checkout *and* an installed binary) and scans it on every run, reading git state, scoring health, and surfacing a **Run** link for any deployed app, executable, web/dashboard or desktop build |
+| Projects | Auto-discovers the `cloned_repos` folder (works from the source checkout *and* an installed binary) and scans it on every run, reading git state, scoring health, and giving every project a **▶ Run** link (starts its desktop app, npm/Streamlit/FastAPI/Flask server or compose stack in a terminal) plus a link to its `index.html` served from the project folder |
 | Calendar | Month view built from task occurrences and due dates |
 | Launchers | Named argv profiles per project with a whitelisted environment and no shell |
 | Assistant | **Tommy** — local Ollama first, deterministic keyword fallback, optional cloud providers. Always shows its thinking and token usage. Tommy is a real agent with tools: he **visits public URLs and reads them**, **reads/searches/creates/modifies any file in `cloned_repos`**, **assesses every project for production readiness** (readme, tests, CI, container, env template, build, git), **builds runnable projects** (with a Run link), and **writes real PDFs** — instead of refusing. |
