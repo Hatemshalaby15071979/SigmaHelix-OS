@@ -33,7 +33,17 @@ class TaskStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class QuestionStatus(StrEnum):
+    """Where a task question stands."""
+
+    OPEN = "open"
+    ANSWERED = "answered"
+    BLOCKED = "blocked"
+
+
 class RiskLevel(StrEnum):
+    """Severity tier of a risk."""
+
     R0 = "R0"
     R1 = "R1"
     R2 = "R2"
@@ -239,6 +249,54 @@ class Note:
         _ordered_times(created, updated, "created_at", "updated_at")
         object.__setattr__(self, "created_at", created)
         object.__setattr__(self, "updated_at", updated)
+
+
+@dataclass(frozen=True, slots=True)
+class TaskQuestion:
+    """A question a task must answer before it can be called done.
+
+    A task is a question seeking an answer: the question is fixed, the answer
+    is evidence, and the task is ready only when every question is answered.
+    """
+
+    question: str
+    task_id: UUID
+    id: UUID = field(default_factory=uuid4)
+    answer: str = ""
+    evidence: str = ""
+    status: QuestionStatus = QuestionStatus.OPEN
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    answered_at: datetime | None = None
+    tenant_id: str = _LOCAL_TENANT
+    display_id: int = 0
+
+    def __post_init__(self) -> None:
+        _non_empty(self.question, "question")
+        if not isinstance(self.id, UUID):
+            raise DomainValidationError("id must be a UUID")
+        if not isinstance(self.task_id, UUID):
+            raise DomainValidationError("task_id must be a UUID")
+        if not isinstance(self.status, QuestionStatus):
+            raise DomainValidationError("status must be a QuestionStatus")
+        if not isinstance(self.answer, str) or not isinstance(self.evidence, str):
+            raise DomainValidationError("answer and evidence must be text")
+        if self.status is QuestionStatus.ANSWERED and not self.answer.strip():
+            raise DomainValidationError("an answered question needs an answer")
+        if isinstance(self.display_id, bool) or not isinstance(self.display_id, int):
+            raise DomainValidationError("display_id must be an integer")
+        if self.display_id < 0:
+            raise DomainValidationError("display_id must not be negative")
+        _non_empty(self.tenant_id, "tenant_id")
+        created = _aware_utc(self.created_at, "created_at")
+        updated = _aware_utc(self.updated_at, "updated_at")
+        _ordered_times(created, updated, "created_at", "updated_at")
+        object.__setattr__(self, "created_at", created)
+        object.__setattr__(self, "updated_at", updated)
+        if self.answered_at is not None:
+            object.__setattr__(
+                self, "answered_at", _aware_utc(self.answered_at, "answered_at")
+            )
 
 
 @dataclass(frozen=True, slots=True)

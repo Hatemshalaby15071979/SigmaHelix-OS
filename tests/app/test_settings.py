@@ -243,7 +243,7 @@ def test_no_assistant_wording():
         ]
     check("agent.py has no user-facing 'assistant'", not bad, str(bad))
     with open(os.path.join(root, "ui.py")) as f:
-        check("chat header says Helix", "💬  Helix" in f.read())
+        check("chat header says Tommy", "💬  Tommy" in f.read())
 
 
 # ---------------------------------------------------------------------------
@@ -251,6 +251,15 @@ def test_gui():
     print("\n== GUI: settings panel ==")
     if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
         check("GUI tests", True, "skipped (no display)")
+        return
+    # A set DISPLAY is not enough: there must be a real X/Wayland server.
+    try:
+        import tkinter
+
+        probe = tkinter.Tk()
+        probe.destroy()
+    except Exception as exc:  # noqa: BLE001 - headless CI has no usable display
+        check("GUI tests", True, f"skipped (display unavailable: {exc})")
         return
     try:
         pass

@@ -78,15 +78,24 @@ def _open_database() -> Database:
 # --------------------------------------------------------------------------
 # commands
 # --------------------------------------------------------------------------
+def command_web(args: argparse.Namespace) -> int:
+    """Serve the local web interface and open it in the browser."""
+    from .app.webui import serve
+
+    port = int(getattr(args, "port", 0) or 0)
+    open_browser = not bool(getattr(args, "no_browser", False))
+    return serve(port=port, open_browser=open_browser)
+
+
 def command_gui(_: argparse.Namespace) -> int:
-    """Start the desktop app."""
+    """Start the legacy desktop window (CustomTkinter)."""
     try:
         from .app.ui import SigmaHelixApp
     except ImportError as exc:
         print(
             "The desktop interface needs CustomTkinter, which is missing.\n"
             f"  missing: {exc.name}\n"
-            "  reinstall with: pip install --force-reinstall sigmahelix",
+            "  the web interface needs no extra packages: run 'sigmahelix'",
             file=sys.stderr,
         )
         return EXIT_FAILURE
@@ -205,6 +214,134 @@ def command_audit(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def command_skills(args: argparse.Namespace) -> int:
+    """Inspect, install and prove the skills that ride on every model call."""
+    from .app.skills import SkillError, SkillLibrary, user_skills_dir
+
+    if args.skills_command == "install":
+        source = args.source.expanduser().resolve()
+        if not source.is_file():
+            print(f"not a file: {source}", file=sys.stderr)
+            return EXIT_USAGE
+        target_dir = user_skills_dir()
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / source.name
+        shutil.copyfile(source, target)
+        try:
+            SkillLibrary().skills(refresh=True)
+        except SkillError as exc:
+            target.unlink(missing_ok=True)
+            print(f"not a usable skill: {exc}", file=sys.stderr)
+            return EXIT_FAILURE
+        print(f"installed {target}")
+        return EXIT_OK
+
+    library = SkillLibrary()
+    if args.skills_command == "list":
+        print(library.report())
+        return EXIT_OK
+
+    if args.skills_command == "show":
+        skill = library.get(args.name)
+        if skill is None:
+            print(f"no such skill: {args.name}", file=sys.stderr)
+            return EXIT_USAGE
+        print(f"name        {skill.name}")
+        print(f"source      {skill.source}")
+        print(f"token       {skill.token}")
+        print(f"path        {skill.path}")
+        print(f"size        {skill.size} chars")
+        print(f"description {skill.description}")
+        print()
+        print(skill.body)
+        return EXIT_OK
+
+    return _verify_skills(library, probe=args.probe)
+
+
+def _verify_skills(library, probe: bool) -> int:
+    """Check composition, then optionally prove it reaches each live backend."""
+    from .app.agent import Agent
+
+    skills = library.skills(refresh=True)
+    if not skills:
+        print("no skills found", file=sys.stderr)
+        return EXIT_FAILURE
+
+    agent = Agent()
+    prompt = agent.system_prompt()
+    composition = agent.last_composition
+    if composition is None or prompt != composition.prompt:
+        print(_fail("composition", "the agent did not build a prompt"))
+        return EXIT_FAILURE
+    missing = [s.name for s in skills if s.name not in composition.prompt]
+    print(f"skills      {len(skills)}")
+    print(f"prompt      {len(composition.prompt)} chars")
+    print(f"included    {len(composition.included)}")
+    if composition.truncated:
+        print(_warn("truncated", ", ".join(composition.truncated)))
+    for name in missing:
+        print(_fail(name, "not present in the composed prompt"))
+    if missing:
+        return EXIT_FAILURE
+
+    if not probe:
+        print(_ok("composition", "every skill is in the system prompt"))
+        print("add --probe to ask each live model to repeat its SKILL tokens")
+        return EXIT_OK
+
+    question = (
+        "Prove you loaded your skills: reply with each SKILL token exactly as "
+        "written, one per line, and nothing else."
+    )
+    messages = [{"role": "system", "content": composition.prompt}]
+    messages.append({"role": "user", "content": question})
+    failures = 0
+
+    local_ok, local_detail = _probe_backend("local", agent, messages, composition)
+    failures += 0 if local_ok else 1
+    print(
+        _ok("local model", local_detail)
+        if local_ok
+        else _fail("local model", local_detail)
+    )
+
+    from .app.models import active_cloud_providers
+
+    if active_cloud_providers():
+        cloud_ok, cloud_detail = _probe_backend("cloud", agent, messages, composition)
+        failures += 0 if cloud_ok else 1
+        print(
+            _ok("cloud model", cloud_detail)
+            if cloud_ok
+            else _fail("cloud model", cloud_detail)
+        )
+    else:
+        print(_warn("cloud model", "no verified provider key — skipped"))
+
+    return EXIT_OK if failures == 0 else EXIT_FAILURE
+
+
+def _probe_backend(kind: str, agent, messages, composition) -> tuple[bool, str]:
+    """Ask one backend to repeat the tokens; the reply is the proof."""
+    try:
+        if kind == "local":
+            reply = agent._ollama_chat(messages, timeout=90)
+        else:
+            reply, error = agent._cloud_chat(messages)
+            if not reply:
+                return False, f"no reply: {error}"
+    except Exception as exc:  # noqa: BLE001 - a probe reports, never raises
+        return False, f"{type(exc).__name__}: {exc}"
+
+    text = (reply or "").lower()
+    found = [token for token in composition.tokens if token.lower() in text]
+    if len(found) == len(composition.tokens):
+        return True, f"{agent.model_name} echoed all {len(found)} tokens"
+    missing = [t for t in composition.tokens if t not in found]
+    return False, f"{len(found)}/{len(composition.tokens)} tokens, missing {missing}"
+
+
 def command_db(args: argparse.Namespace) -> int:
     database = _open_database()
     runner = MigrationRunner(database)
@@ -267,6 +404,30 @@ def command_doctor(_args: argparse.Namespace) -> int:
             problems += 1
             print(_warn(label, f"missing — {hint}"))
 
+    # skills ride on every model call, so a broken one is a real problem
+    try:
+        from .app.skills import SkillLibrary
+
+        library = SkillLibrary()
+        skills = library.skills(refresh=True)
+        composition = library.compose("")
+        if not skills:
+            problems += 1
+            print(_fail("skills", "none found — models get no operating rules"))
+        elif composition.truncated:
+            problems += 1
+            print(_warn("skills", f"over budget: {', '.join(composition.truncated)}"))
+        else:
+            print(
+                _ok("skills", f"{len(skills)} active, {len(composition.prompt)} chars")
+            )
+        for error in library.errors:
+            problems += 1
+            print(_fail("skill file", error))
+    except Exception as exc:  # noqa: BLE001 - doctor must never crash
+        problems += 1
+        print(_fail("skills", str(exc)))
+
     # local model server
     host = os.environ.get("OLLAMA_HOST", "http://127.0.0.1:11435")
     parsed = host.split("://", 1)[-1]
@@ -303,9 +464,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--version", action="version", version=f"sigmahelix {__version__}"
     )
+    parser.add_argument("--port", type=int, default=0, help="web port (0 = pick one)")
+    parser.add_argument(
+        "--no-browser", action="store_true", help="do not open the browser"
+    )
     subparsers = parser.add_subparsers(dest="command")
 
-    subparsers.add_parser("gui", help="start the desktop app (default)")
+    web = subparsers.add_parser("web", help="serve the web interface (default)")
+    web.add_argument("--port", type=int, default=argparse.SUPPRESS)
+    web.add_argument("--no-browser", action="store_true", default=argparse.SUPPRESS)
+    subparsers.add_parser("gui", help="start the legacy desktop window")
     subparsers.add_parser("chat", help="start the console REPL")
     subparsers.add_parser("status", help="show database, counts and audit state")
     subparsers.add_parser("doctor", help="check the local environment")
@@ -332,10 +500,25 @@ def build_parser() -> argparse.ArgumentParser:
     db_sub.add_parser("upgrade", help="apply pending migrations")
     db_sub.add_parser("info", help="show the schema version")
 
+    skills = subparsers.add_parser("skills", help="inspect and prove model skills")
+    skills_sub = skills.add_subparsers(dest="skills_command", required=True)
+    skills_sub.add_parser("list", help="list every discovered skill")
+    skills_show = skills_sub.add_parser("show", help="print one skill in full")
+    skills_show.add_argument("name")
+    skills_verify = skills_sub.add_parser(
+        "verify", help="check composition and probe each live model"
+    )
+    skills_verify.add_argument(
+        "--probe", action="store_true", help="ask each live model to echo its tokens"
+    )
+    skills_install = skills_sub.add_parser("install", help="add a skill markdown file")
+    skills_install.add_argument("source", type=Path)
+
     return parser
 
 
 COMMANDS = {
+    "web": command_web,
     "gui": command_gui,
     "chat": command_chat,
     "status": command_status,
@@ -346,13 +529,14 @@ COMMANDS = {
     "restore": command_restore,
     "audit": command_audit,
     "db": command_db,
+    "skills": command_skills,
 }
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    command = args.command or "gui"
+    command = args.command or "web"
     handler = COMMANDS[command]
     try:
         return handler(args)

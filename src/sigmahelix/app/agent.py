@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Agent — LLM-first Helix (Ollama) with deterministic keyword fallback.
+Agent — LLM-first Tommy (Ollama) with deterministic keyword fallback.
 
 - Talks to Ollama at http://localhost:11435 (model configurable via OLLAMA_MODEL env,
   default: llama3.2:1b).
@@ -30,6 +30,7 @@ from .managers import (
     TasksManager,
 )
 from .security import is_loopback_url
+from .skills import SkillLibrary
 from .voice import VoiceEngine
 
 _configured_hosts = os.environ.get(
@@ -148,11 +149,11 @@ def wants_agenda(text: str) -> bool:
     return bool(_AGENDA_QUERY.search(t) and _AGENDA_SCOPE.search(t))
 
 
-SYSTEM_PROMPT = """You are Helix, running locally on the user's machine.
+SYSTEM_PROMPT = """You are Tommy, running locally on the user's machine.
 You manage tasks, notes, projects, a calendar, app launching, and a released-app explorer.
 
 CORE PERSONA - ALWAYS:
-- You are Helix. Introduce yourself as Helix — never as a bot, a service, or a role.
+- You are Tommy. Introduce yourself as Tommy — never as a bot, a service, or a role.
 - Honest and practical, never fake or pretend
 - Human tone and style - never robotic or AI-cliché
 - Never assume, never pretend to know things you don't
@@ -237,8 +238,47 @@ class Agent:
         self.cloud_model = None  # selected cloud model id (if any)
         self.cloud_provider = None  # openai | openrouter | deepseek
         self.api_keys = {}  # Store API keys for OpenAI/OpenRouter
-        self.injected_skills = {}  # Store user-injected skills
-        self.persona_style = "honest"  # Helix persona style: honest, human, evidence
+        self.injected_skills = {}  # Store user-injected capability prompts
+        self.persona_style = "honest"  # Tommy persona style: honest, human, evidence
+        # Operating instructions that follow every model call, local or cloud.
+        self.skills = SkillLibrary()
+        self.last_composition = None
+        # What the last model turn did: thinking text and token spend.
+        self.last_trace: dict[str, Any] = {}
+
+    # ---- prompt assembly --------------------------------------------------
+    def capability_block(self):
+        """Extra capability prompts the user switched on from the UI."""
+        if not self.injected_skills:
+            return ""
+        lines = ["\n\n## ENABLED CAPABILITIES"]
+        for name, spec in sorted(self.injected_skills.items()):
+            desc = (spec or {}).get("description") if isinstance(spec, dict) else None
+            lines.append(f"- {name}: {desc or 'available on request'}")
+        return "\n".join(lines) + "\n"
+
+    def system_prompt(self):
+        """Base persona + enabled capabilities + every active skill.
+
+        This is the single place the system prompt is built. Both the local
+        Ollama call and the cloud call receive the same text, so switching
+        provider can never drop the user's rules.
+        """
+        composition = self.skills.compose(SYSTEM_PROMPT + self.capability_block())
+        self.last_composition = composition
+        return composition.prompt
+
+    def _build_messages(self, user_text):
+        messages = [{"role": "system", "content": self.system_prompt()}]
+        for role, content in self.history[-8:]:
+            messages.append({"role": role, "content": content})
+        messages.append({"role": "user", "content": user_text})
+        return messages
+
+    def reload_skills(self):
+        """Re-read the skill folders and rebuild the prompt on the next turn."""
+        self.skills.skills(refresh=True)
+        return len(self.skills.skills())
 
     # ---- public API ------------------------------------------------------
     @property
@@ -253,6 +293,7 @@ class Agent:
             return "Please say something or enter a command."
         raw = text.strip()
         text = raw.lower()
+        self.last_trace = {}  # every turn reports its own thinking and spend
 
         # Slash-styled direct commands bypass the LLM for speed/precision
         direct = self._direct_route(text)
@@ -369,7 +410,19 @@ class Agent:
                 continue
             if name != self.model_name:
                 self.model_name = name  # remember the model that works
-            return out.get("message", {}).get("content", "").strip()
+            message = out.get("message") or {}
+            prompt_tokens = int(out.get("prompt_eval_count") or 0)
+            completion_tokens = int(out.get("eval_count") or 0)
+            self.last_trace = {
+                "provider": "local",
+                "model": name,
+                "thinking": (message.get("thinking") or "").strip(),
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": prompt_tokens + completion_tokens,
+                "duration_ms": int((out.get("total_duration") or 0) / 1_000_000),
+            }
+            return (message.get("content") or "").strip()
         raise last_err or RuntimeError("no local model could answer")
 
     def _cloud_chat(self, messages, timeout=30):
@@ -412,6 +465,7 @@ class Agent:
         for provider, model in attempts:
             if not model:
                 continue
+            trace: dict[str, Any] = {}
             reply, err = try_cloud_query(
                 provider,
                 model,
@@ -419,8 +473,10 @@ class Agent:
                 "",
                 timeout=timeout,
                 messages=messages,
+                trace=trace,
             )
             if reply:
+                self.last_trace = trace
                 return reply, None
             last_err = err or "empty reply"
         return None, last_err
@@ -429,10 +485,7 @@ class Agent:
         """One LLM turn: intent JSON -> execute -> maybe speak/natural reply."""
         with self._llm_lock:
             try:
-                messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-                for role, content in self.history[-8:]:
-                    messages.append({"role": role, "content": content})
-                messages.append({"role": "user", "content": user_text})
+                messages = self._build_messages(user_text)
 
                 # ---- pick a backend from the selected mode ----
                 content = None
@@ -674,7 +727,7 @@ class Agent:
             result += (
                 "⚠️ Full YouTube transcript summarization requires additional setup.\n"
             )
-            result += "Helix can analyze video descriptions and metadata.\n"
+            result += "Tommy can analyze video descriptions and metadata.\n"
             result += "Please provide video title/description for basic analysis."
             return result
         except Exception as e:
@@ -868,4 +921,4 @@ SKILLS:
   YouTube summary, skill injection
 
 PERSONALITY:
-  Helix: honest, practical, evidence-based, human tone, never fakes, always a doer"""
+  Tommy: honest, practical, evidence-based, human tone, never fakes, always a doer"""

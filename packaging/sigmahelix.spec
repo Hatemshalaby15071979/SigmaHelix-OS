@@ -32,6 +32,12 @@ hiddenimports = [
 
 datas = [
     *collect_data_files("customtkinter"),
+    # Skills and the web assets are read at runtime, never imported.
+    (os.path.join(SRC_ROOT, "sigmahelix", "skills"), "sigmahelix/skills"),
+    (
+        os.path.join(SRC_ROOT, "sigmahelix", "app", "webui", "static"),
+        "sigmahelix/app/webui/static",
+    ),
 ]
 
 a = Analysis(

@@ -136,9 +136,9 @@ def test_legacy_import_marker_prevents_downgrade_that_loses_idempotence(database
     tasks, notes = _managers()
     LegacySessionImporter(database).import_managers(SOURCE_ID, tasks, notes)
 
-    # The newest migration also refuses to roll back while tasks exist, so the
-    # import receipt is protected twice over.
-    with pytest.raises(MigrationDataLossError, match="tasks contains records"):
+    # The import receipt (a row in legacy_imports) blocks any rollback, so the
+    # imported data can never be silently dropped on a downgrade.
+    with pytest.raises(MigrationDataLossError, match="legacy_imports contains records"):
         MigrationRunner(database).downgrade(3)
 
     assert MigrationRunner(database).current_version() == (

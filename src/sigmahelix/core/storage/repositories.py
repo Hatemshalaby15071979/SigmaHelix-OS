@@ -18,8 +18,10 @@ from ..models import (
     Evidence,
     Note,
     Project,
+    QuestionStatus,
     RiskLevel,
     Task,
+    TaskQuestion,
     TaskStatus,
 )
 from .database import Database
@@ -351,6 +353,92 @@ class TaskRepository(SqliteRepository[Task]):
                 allocates_display_id=True,
             ),
         )
+
+
+def _question_encode(record: TaskQuestion) -> dict[str, object]:
+    return {
+        "id": str(record.id),
+        "tenant_id": record.tenant_id,
+        "task_id": str(record.task_id),
+        "question": record.question,
+        "answer": record.answer,
+        "evidence": record.evidence,
+        "status": record.status.value,
+        "created_at": _time(record.created_at),
+        "updated_at": _time(record.updated_at),
+        "answered_at": _time(record.answered_at),
+        "display_id": record.display_id,
+    }
+
+
+def _question_decode(row: sqlite3.Row) -> TaskQuestion:
+    return TaskQuestion(
+        id=UUID(row["id"]),
+        tenant_id=row["tenant_id"],
+        task_id=UUID(row["task_id"]),
+        question=row["question"],
+        answer=row["answer"],
+        evidence=row["evidence"],
+        status=QuestionStatus(row["status"]),
+        created_at=_parse_time(row["created_at"]),  # type: ignore[arg-type]
+        updated_at=_parse_time(row["updated_at"]),  # type: ignore[arg-type]
+        answered_at=_parse_time(row["answered_at"]),
+        display_id=row["display_id"],
+    )
+
+
+class TaskQuestionRepository(SqliteRepository[TaskQuestion]):
+    """Questions attached to a task; answered ones carry their evidence."""
+
+    def __init__(self, database: Database) -> None:
+        super().__init__(
+            database,
+            _Codec(
+                "task_questions",
+                (
+                    "id",
+                    "tenant_id",
+                    "task_id",
+                    "question",
+                    "answer",
+                    "evidence",
+                    "status",
+                    "created_at",
+                    "updated_at",
+                    "answered_at",
+                    "display_id",
+                ),
+                _question_encode,
+                _question_decode,
+                "display_id, id",
+                soft_delete=True,
+                allocates_display_id=True,
+            ),
+        )
+
+    def list_for_task(
+        self, task_id: UUID, tenant_id: str = "local"
+    ) -> list[TaskQuestion]:
+        """Every question of one task, in the order it was written."""
+        sql = (
+            "SELECT * FROM task_questions "
+            "WHERE tenant_id = ? AND task_id = ? AND deleted_at IS NULL "
+            "ORDER BY display_id, id"
+        )
+        with self.database.connection() as connection:
+            rows = connection.execute(sql, (tenant_id, str(task_id))).fetchall()
+        return [self.codec.decode(row) for row in rows]
+
+    def delete_for_task(self, task_id: UUID, tenant_id: str = "local") -> int:
+        """Soft-delete every question of a task. Returns how many were closed."""
+        stamp = datetime.now(UTC).isoformat()
+        with self.database.transaction() as connection:
+            cursor = connection.execute(
+                "UPDATE task_questions SET deleted_at = ? "
+                "WHERE tenant_id = ? AND task_id = ? AND deleted_at IS NULL",
+                (stamp, tenant_id, str(task_id)),
+            )
+        return cursor.rowcount
 
 
 class NoteRepository(SqliteRepository[Note]):

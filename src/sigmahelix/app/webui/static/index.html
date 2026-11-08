@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="sh-token" content="__SIGMAHELIX_TOKEN__" />
+    <title>SigmaHelix</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <aside class="rail">
+        <div class="brand">
+          <span class="brand-mark">Σ</span>
+          <div>
+            <strong>SigmaHelix</strong>
+            <small id="model-name">connecting…</small>
+          </div>
+        </div>
+
+        <nav class="nav" aria-label="Sections">
+          <button class="nav-item is-active" data-view="chat">
+            <span aria-hidden="true">💬</span> Chat
+          </button>
+          <button class="nav-item" data-view="tasks">
+            <span aria-hidden="true">✅</span> Tasks <em id="task-count">0</em>
+          </button>
+          <button class="nav-item" data-view="projects">
+            <span aria-hidden="true">📁</span> Projects <em id="project-count">0</em>
+          </button>
+          <button class="nav-item" data-view="agenda">
+            <span aria-hidden="true">📅</span> Agenda
+          </button>
+          <button class="nav-item" data-view="notes">
+            <span aria-hidden="true">📝</span> Notes <em id="note-count">0</em>
+          </button>
+          <button class="nav-item" data-view="skills">
+            <span aria-hidden="true">🧠</span> Skills <em id="skill-count">0</em>
+          </button>
+        </nav>
+
+        <div class="rail-foot">
+          <button id="refresh" class="ghost" title="Rescan everything">↻ Refresh</button>
+          <span id="status" role="status" aria-live="polite"></span>
+        </div>
+      </aside>
+
+      <main class="stage">
+        <!-- chat -->
+        <section class="view is-active" id="view-chat">
+          <header class="view-head">
+            <h1>Talk to Tommy</h1>
+            <p>Local-first. Every reply carries its thinking and token cost.</p>
+          </header>
+          <div class="chat-log" id="chat-log" aria-live="polite"></div>
+          <form class="composer" id="chat-form">
+            <textarea
+              id="chat-input"
+              rows="1"
+              placeholder="Ask anything, or say 'create task …'"
+              aria-label="Message"
+            ></textarea>
+            <button type="submit" id="send">Send</button>
+          </form>
+        </section>
+
+        <!-- tasks -->
+        <section class="view" id="view-tasks">
+          <header class="view-head">
+            <h1>Tasks</h1>
+            <p>Pinned first. Each task carries questions that must be answered before it is done.</p>
+          </header>
+          <form class="inline-form" id="task-form">
+            <input id="task-title" placeholder="New task — e.g. Helix production readiness" aria-label="Task title" required />
+            <input id="task-due" type="date" aria-label="Due date" />
+            <select id="task-recurrence" aria-label="Repeats">
+              <option value="none">once</option>
+              <option value="daily">daily</option>
+              <option value="weekly">weekly</option>
+              <option value="monthly">monthly</option>
+            </select>
+            <button type="button" id="task-propose">Draft with Tommy</button>
+            <button type="submit">Add</button>
+          </form>
+          <div id="task-proposal" class="proposal"></div>
+          <div id="project-chips" class="chips"></div>
+          <ul class="list" id="task-list"></ul>
+        </section>
+
+        <!-- projects -->
+        <section class="view" id="view-projects">
+          <header class="view-head">
+            <h1>Projects</h1>
+            <p>Only folders under <code>cloned_repos</code>. A Run link appears when a build really exists.</p>
+          </header>
+          <div class="cards" id="project-list"></div>
+        </section>
+
+        <!-- agenda -->
+        <section class="view" id="view-agenda">
+          <header class="view-head">
+            <h1>Agenda</h1>
+            <p>Tasks with a due date, grouped by day.</p>
+          </header>
+          <div class="chips" id="agenda-scopes">
+            <button class="chip is-active" data-scope="today">Today</button>
+            <button class="chip" data-scope="tomorrow">Tomorrow</button>
+            <button class="chip" data-scope="this week">This week</button>
+            <button class="chip" data-scope="this month">This month</button>
+          </div>
+          <pre class="agenda" id="agenda-text"></pre>
+        </section>
+
+        <!-- notes -->
+        <section class="view" id="view-notes">
+          <header class="view-head">
+            <h1>Notes</h1>
+            <p>Information to keep, with nothing to do.</p>
+          </header>
+          <form class="inline-form" id="note-form">
+            <input id="note-title" placeholder="New note" aria-label="Note" required />
+            <button type="submit">Add</button>
+          </form>
+          <ul class="list" id="note-list"></ul>
+        </section>
+
+        <!-- skills -->
+        <section class="view" id="view-skills">
+          <header class="view-head">
+            <h1>Skills</h1>
+            <p>These ride on every model call, local or cloud. Tokens prove delivery.</p>
+          </header>
+          <ul class="list" id="skill-list"></ul>
+        </section>
+      </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

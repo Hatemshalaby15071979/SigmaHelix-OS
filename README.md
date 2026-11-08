@@ -9,21 +9,28 @@ account, no sync service, and no telemetry. Cloud models are available but
 system's keyring, never in a file this project writes.
 
 ```
-sigmahelix            # desktop app
-sigmahelix chat       # terminal assistant
-sigmahelix doctor     # check that everything works
+sigmahelix            # local web app (opens http://127.0.0.1:<port> in your browser)
+sigmahelix --desktop # the legacy Tk desktop window
+sigmahelix chat      # terminal assistant
+sigmahelix doctor    # check that everything works
 ```
+
+The web interface is the primary surface. It is served on loopback only and
+every API call needs a per-session token embedded in the page, so no other
+process on the machine can drive it. The Tk window is kept for environments
+without a browser.
 
 ## What it does
 
 | Area | Capability |
 | --- | --- |
-| Tasks | Create, complete, pin, delete; recurring series with materialised occurrences |
+| Tasks | Question-driven: a task is a question seeking an answer. Each task carries sub-questions with answers + evidence; it is only "done" once every question is answered. Tommy drafts the questions, you approve. |
 | Notes | Create, edit, pin, delete, full-text search |
-| Projects | Discover repositories, read git branch/commit/dirty state, score health, list build artifacts |
+| Projects | Discover repositories in `cloned_repos`, read git state, score health, and surface a **Run** link for any deployed app, executable, web/dashboard or desktop build it finds |
 | Calendar | Month view built from task occurrences and due dates |
 | Launchers | Named argv profiles per project with a whitelisted environment and no shell |
-| Assistant | Local Ollama first, deterministic keyword fallback, optional cloud providers |
+| Assistant | **Tommy** — local Ollama first, deterministic keyword fallback, optional cloud providers. Always shows its thinking and token usage. |
+| Skills | Tommy auto-loads a fixed set of skills into every model call (frontend/webapp, UI design, DevOps, prompt engineering, `i-have-adhd` and your personal `Hatem_specific`), so they apply to any model, local or cloud |
 | Reminders | Persisted scheduler, notification inbox, alarm state machine (snooze, dismiss, reschedule) |
 | Audit | Append-only SHA-256 hash chain over every mutation, with verification |
 | Backup | Online SQLite snapshots with a checksum sidecar manifest |

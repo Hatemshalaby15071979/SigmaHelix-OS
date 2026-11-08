@@ -8,7 +8,33 @@ All notable changes to SigmaHelix are recorded here. The format follows
 
 ### Added
 
-- Tasks and notes now live in the durable SQLite core. Migration v14 adds
+- **Persona renamed to Tommy.** The assistant now introduces itself as Tommy in
+  the web UI, desktop window and console. All skill injection is wired to Tommy.
+- **Dynamic web interface is the default.** `sigmahelix` now serves a
+  loopback-only web app (token-protected) and opens it in your browser;
+  `sigmahelix --desktop` keeps the legacy Tk window. The web UI talks to the
+  same durable core, so nothing is lost switching surfaces.
+- **Skill engine (`SkillLibrary`) wired into every model call.** Tommy composes
+  a fixed skill set into the system prompt for *both* local Ollama and cloud
+  providers: frontend/webapp engineering, UI & interactive design, DevOps,
+  prompt engineering, `i-have-adhd`, and the personal `Hatem_specific` skill.
+  The composed prompt is sent on every request; a `skills verify` command
+  proves each skill reaches the payload. Personal skills install automatically
+  to `~/.local/share/sigmahelix/skills`.
+- **Model thinking and token trace.** Ollama `thinking` + `eval_count` and
+  cloud `usage`/`reasoning` are captured, printed in the console, and shown in
+  the web UI as a collapsible thinking block plus an in/out token chip.
+- **Project launch links.** The Projects section scans `cloned_repos` for any
+  deployed app, executable, web/dashboard or desktop build and renders a
+  clickable **Run** link that persists across launches and spawns the process
+  safely (no shell, confined to the project root).
+- **Question-driven Tasks (migration v15).** A task is now a question seeking an
+  answer. Each task carries sub-questions, each with an answer and evidence; the
+  task is only completable once every question is answered (readiness gate).
+  Tommy proposes the questions for any project in `cloned_repos` by scanning the
+  real project on disk; you approve before the task is created. Tasks carry a
+  due date and appear in the calendar.
+- Tasks and notes live in the durable SQLite core. Migration v14 adds
   `pinned`, `display_id` and `recurrence` to tasks and `pinned`/`display_id` to
   notes; existing rows are numbered during the upgrade.
 - `AppService` is the single doorway from the UI to the core. Every mutation

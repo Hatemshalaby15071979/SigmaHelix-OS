@@ -58,7 +58,15 @@ package-dir = { "" = "src" }
 where = ["src"]
 
 [tool.setuptools.package-data]
-sigmahelix = ["py.typed"]
+sigmahelix = [
+    "py.typed",
+    "skills/builtin/*.md",
+    "skills/personal/*.md",
+    "skills/personal/*.txt",
+    "app/webui/static/*.html",
+    "app/webui/static/*.css",
+    "app/webui/static/*.js",
+]
 
 # ---------------------------------------------------------------------------
 # tooling

@@ -720,9 +720,14 @@ class SigmaHelixApp:
             ).pack(fill="x", pady=1)
 
         active = list(getattr(self.agent, "injected_skills", {}).keys())
+        try:
+            skill_count = len(self.agent.skills.skills())
+        except Exception:
+            skill_count = 0
         ctk.CTkLabel(
             frame,
-            text=("active: " + ", ".join(active)) if active else "none active yet",
+            text=f"{skill_count} skills always on · "
+            + (("active: " + ", ".join(active)) if active else "no extra capabilities"),
             font=("Segoe UI", 9),
             justify="left",
             text_color=T.colors["text_dim"],
@@ -736,21 +741,21 @@ class SigmaHelixApp:
                 "description": "Search the web for information and summarize findings",
                 "action": "web_search",
                 "format": '{"query": "<search query>"}',
-                "persona": "Helix honest practical web search",
+                "persona": "Tommy honest practical web search",
             },
             "skill_file_ops": {
                 "name": "file_operations",
                 "description": "Create, modify, read files on the system",
                 "action": "file_operations",
                 "format": '{"operation": "<create|read|modify>", "path": "<file_path>", "content": "<text>"}',
-                "persona": "Helix practical file operations",
+                "persona": "Tommy practical file operations",
             },
             "skill_youtube_summary": {
                 "name": "youtube_summary",
                 "description": "Summarize YouTube video content and recommend related videos",
                 "action": "youtube_summary",
                 "format": '{"url": "<video_url>"}',
-                "persona": "Helix YouTube summary",
+                "persona": "Tommy YouTube summary",
             },
             "upload_skills": {
                 "name": "upload_custom",
@@ -773,14 +778,14 @@ class SigmaHelixApp:
             self.status.configure(text=f"⚡ Unknown skill: {skill_name}")
 
     def _render_persona_section(self, parent=None):
-        """Render Helix persona configuration section."""
+        """Render Tommy persona configuration section."""
         parent = parent if parent is not None else self.settings_frame
         frame = ctk.CTkFrame(parent, fg_color="transparent")
         frame.pack(fill="both", expand=True, padx=8, pady=8)
 
         ctk.CTkLabel(
             frame,
-            text="🧑‍💼 Helix Persona:",
+            text="🧑‍💼 Tommy Persona:",
             font=T.font_head,
             text_color=T.colors["accent"],
         ).pack(anchor="w")
@@ -814,9 +819,9 @@ class SigmaHelixApp:
         ).pack(anchor="w", pady=(4, 0))
 
     def _set_persona(self, persona):
-        """Set Helix's persona style."""
+        """Set Tommy's persona style."""
         self.agent.persona_style = persona
-        self.status.configure(text=f"🧑‍💼 Helix persona set to: {persona}")
+        self.status.configure(text=f"🧑‍💼 Tommy persona set to: {persona}")
         self._render_settings_panel()
 
     # ---------- helpers ----------
@@ -848,7 +853,7 @@ class SigmaHelixApp:
     def _chat_panel(self):
         frame = ctk.CTkFrame(self.app, fg_color=T.colors["bg_panel"], corner_radius=12)
         frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
-        self._header(frame, "💬  Helix")
+        self._header(frame, "💬  Tommy")
 
         self.chat_box = self._textbox(frame, 150)
 
@@ -927,12 +932,35 @@ class SigmaHelixApp:
     def _show_reply(self, reply):
         self.chat_box.configure(state="normal")
         self.chat_box.insert("end", f"{reply}\n")
+        self._append_trace()
         self.chat_box.configure(state="disabled")
         self.chat_box.see("end")
         self.send_btn.configure(state="normal", text="Send ➤")
         # store reply for on-demand listening — NO automatic TTS
         self._last_reply = reply.replace("🤖", "").replace("__EXIT__", "").strip()
         self.refresh_side_panels()
+
+    def _append_trace(self):
+        """Show the model's thinking and what the turn cost, every time."""
+        trace = getattr(self.agent, "last_trace", None) or {}
+        if not trace:
+            return
+        if "trace_dim" not in self.chat_box.tag_names():
+            self.chat_box.tag_config("trace_dim", foreground=T.colors["text_dim"])
+        thinking = (trace.get("thinking") or "").strip()
+        if thinking:
+            self.chat_box.insert("end", f"💭 {thinking}\n", "trace_dim")
+        prompt_tokens = trace.get("prompt_tokens") or 0
+        completion_tokens = trace.get("completion_tokens") or 0
+        if prompt_tokens or completion_tokens:
+            model = trace.get("model") or self.agent.model_name
+            total = prompt_tokens + completion_tokens
+            self.chat_box.insert(
+                "end",
+                f"   [{model} · {prompt_tokens} in / {completion_tokens} out "
+                f"/ {total} tokens]\n",
+                "trace_dim",
+            )
 
     def _listen_to_reply(self):
         """Explicit on-demand TTS of the latest reply."""
@@ -1021,7 +1049,7 @@ class SigmaHelixApp:
         if not tasks:
             ctk.CTkLabel(
                 self.task_list,
-                text="No tasks yet — tell Helix 'create task …'.",
+                text="No tasks yet — tell Tommy 'create task …'.",
                 font=("Segoe UI", 12),
                 text_color=T.colors["text_dim"],
             ).pack(anchor="w", padx=10, pady=8)

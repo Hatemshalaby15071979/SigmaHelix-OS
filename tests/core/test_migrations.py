@@ -153,7 +153,10 @@ def test_migration_runner_refuses_to_remove_a_populated_audit_log(tmp_path):
     with pytest.raises(MigrationDataLossError, match="audit_log contains records"):
         MigrationRunner(database).downgrade(1)
 
-    assert MigrationRunner(database).current_version() == 2
+    # A blocked downgrade must not partially roll back the schema.
+    assert MigrationRunner(database).current_version() == (
+        MigrationRunner(database).latest_version
+    )
 
 
 def test_alarm_migration_backfills_existing_notifications(tmp_path):

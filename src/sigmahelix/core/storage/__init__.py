@@ -42,6 +42,7 @@ from .repositories import (
     NoteRepository,
     ProjectRepository,
     RepositoryOperationError,
+    TaskQuestionRepository,
     TaskRepository,
 )
 from .scheduler import JobRun, MissedJobRun, ScheduledJob, Scheduler, SchedulerError
@@ -100,5 +101,6 @@ __all__ = [
     "ScheduledJob",
     "Scheduler",
     "SchedulerError",
+    "TaskQuestionRepository",
     "TaskRepository",
 ]

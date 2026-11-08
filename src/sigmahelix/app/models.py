@@ -957,7 +957,7 @@ def dropdown_items():
                     "label": "Add Web Search Skill",
                     "value": "skill_web_search",
                     "kind": "skill",
-                    "description": "Enable web search capability for Helix",
+                    "description": "Enable web search capability for Tommy",
                 },
                 {
                     "label": "Add File Operations Skill",
@@ -981,7 +981,7 @@ def dropdown_items():
         }
     )
 
-    # Helix persona section
+    # Tommy persona section
     items.append(
         {
             "category": "🧑‍💼 TOMMY PERSONA",
@@ -990,7 +990,7 @@ def dropdown_items():
                     "label": "Honest & Practical Mode",
                     "value": "persona_honest",
                     "kind": "persona",
-                    "description": "Helix always honest, never fakes, provides evidence/sources",
+                    "description": "Tommy always honest, never fakes, provides evidence/sources",
                 },
                 {
                     "label": "Human Tone Style",
@@ -1122,7 +1122,9 @@ PROBE_MODEL = {
 }
 
 
-def try_cloud_query(provider, model, api_key, user_text, timeout=30, messages=None):
+def try_cloud_query(
+    provider, model, api_key, user_text, timeout=30, messages=None, trace=None
+):
     """Try a cloud API query and return (reply, error).
 
     All three providers speak the OpenAI-compatible chat/completions shape, so
@@ -1131,6 +1133,9 @@ def try_cloud_query(provider, model, api_key, user_text, timeout=30, messages=No
 
     Pass ``messages`` (a full system/history/user list) to keep the
     conversation structured; ``user_text`` is then only a fallback.
+
+    Pass a dict as ``trace`` to receive the model's thinking text and token
+    usage for the call, so the UI can show what was spent.
     """
     url = PROVIDER_ENDPOINTS.get(provider)
     if not url:
@@ -1170,9 +1175,27 @@ def try_cloud_query(provider, model, api_key, user_text, timeout=30, messages=No
 
     try:
         data = json.loads(body)
-        return data["choices"][0]["message"]["content"], None
+        message = data["choices"][0]["message"]
     except Exception as e:
         return None, f"{provider} bad response: {str(e)[:100]}"
+
+    if trace is not None:
+        usage = data.get("usage") or {}
+        prompt_tokens = int(usage.get("prompt_tokens") or 0)
+        completion_tokens = int(usage.get("completion_tokens") or 0)
+        reasoning = message.get("reasoning_content") or message.get("reasoning") or ""
+        trace.update(
+            provider=provider,
+            model=model,
+            thinking=str(reasoning).strip(),
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=int(
+                usage.get("total_tokens") or prompt_tokens + completion_tokens
+            ),
+            duration_ms=0,
+        )
+    return message.get("content"), None
 
 
 def test_api_key(provider, api_key, timeout=12):

@@ -12,6 +12,7 @@ prefix="${SIGMAHELIX_PREFIX:-$HOME/.local}"
 app_dir="$prefix/share/sigmahelix"
 venv_dir="$app_dir/venv"
 bin_dir="$prefix/bin"
+data_dir="${XDG_DATA_HOME:-$HOME/.local/share}"
 python_bin="${SIGMAHELIX_PYTHON:-python3}"
 mode="${1:-release}"
 
@@ -42,8 +43,16 @@ mkdir -p "$app_dir" "$bin_dir"
 say "linking $bin_dir/sigmahelix"
 ln -sfn "$venv_dir/bin/sigmahelix" "$bin_dir/sigmahelix"
 
+# Personal skills live in the app config so they survive reinstalls and can be
+# edited by the user. The package also ships copies; a file here wins.
+say "installing skills into $data_dir/sigmahelix/skills"
+mkdir -p "$data_dir/sigmahelix/skills"
+for skill in "$repo_root"/src/sigmahelix/skills/personal/*.md; do
+  [[ -f "$skill" ]] || continue
+  install -m 0644 "$skill" "$data_dir/sigmahelix/skills/"
+done
+
 # Desktop entry and icon (silently skipped on headless machines).
-data_dir="${XDG_DATA_HOME:-$HOME/.local/share}"
 mkdir -p "$data_dir/applications" "$data_dir/icons/hicolor/scalable/apps"
 install -m 0644 "$repo_root/packaging/sigmahelix.desktop" \
   "$data_dir/applications/sigmahelix.desktop"

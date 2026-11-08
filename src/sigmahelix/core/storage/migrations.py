@@ -660,6 +660,41 @@ ALTER TABLE tasks DROP COLUMN pinned;
 """,
         rollback_requires_empty=("tasks", "notes"),
     ),
+    Migration(
+        version=15,
+        name="task_questions_v15",
+        up_sql="""
+CREATE TABLE task_questions (
+    id TEXT NOT NULL,
+    tenant_id TEXT NOT NULL CHECK(length(trim(tenant_id)) > 0),
+    task_id TEXT NOT NULL,
+    question TEXT NOT NULL CHECK(length(trim(question)) > 0),
+    answer TEXT NOT NULL DEFAULT '',
+    evidence TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'open'
+        CHECK(status IN ('open', 'answered', 'blocked')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    answered_at TEXT,
+    display_id INTEGER NOT NULL DEFAULT 0 CHECK(display_id >= 0),
+    deleted_at TEXT,
+    PRIMARY KEY (id),
+    UNIQUE (tenant_id, id),
+    FOREIGN KEY (tenant_id, task_id) REFERENCES tasks(tenant_id, id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX idx_task_questions_tenant_display_id
+    ON task_questions(tenant_id, display_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_task_questions_task
+    ON task_questions(tenant_id, task_id, display_id) WHERE deleted_at IS NULL;
+""",
+        down_sql="""
+DROP INDEX IF EXISTS idx_task_questions_task;
+DROP INDEX IF EXISTS idx_task_questions_tenant_display_id;
+DROP TABLE IF EXISTS task_questions;
+""",
+        rollback_requires_empty=("task_questions",),
+    ),
 )
 
 
@@ -731,6 +766,14 @@ class MigrationRunner:
 
     def downgrade(self, target_version: int = 0) -> int:
         self._validate_target(target_version)
+        # Pre-flight: a failed downgrade must not leave the schema half-rolled
+        # back. Check every data-loss guard across the whole range *before*
+        # mutating anything, so the operation is all-or-nothing.
+        with self.database.connection() as precheck:
+            current = int(precheck.execute("PRAGMA user_version").fetchone()[0])
+            for version in range(target_version + 1, current + 1):
+                migration = self._migration(version)
+                self._require_empty_tables(precheck, migration.rollback_requires_empty)
         while True:
             with self.database.connection() as connection:
                 connection.execute("BEGIN IMMEDIATE")

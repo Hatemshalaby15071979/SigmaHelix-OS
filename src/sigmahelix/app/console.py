@@ -16,8 +16,31 @@ import sys
 from .agent import Agent
 
 BANNER = """══════════════════════════════════════════════════
- SIGMAHELIX — Helix (local LLM)
+ SIGMAHELIX — Tommy (local LLM)
 ══════════════════════════════════════════════════"""
+
+DIM = "\033[2m"
+RESET = "\033[0m"
+
+
+def _trace_lines(agent):
+    """Thinking and token spend for the turn that just finished."""
+    trace = getattr(agent, "last_trace", None) or {}
+    if not trace:
+        return []
+    lines = []
+    thinking = (trace.get("thinking") or "").strip()
+    if thinking:
+        lines.append(f"{DIM}  thinking: {thinking}{RESET}")
+    prompt_tokens = trace.get("prompt_tokens") or 0
+    completion_tokens = trace.get("completion_tokens") or 0
+    if prompt_tokens or completion_tokens:
+        model = trace.get("model") or agent.model_name
+        lines.append(
+            f"{DIM}  [{model} · {prompt_tokens} in / {completion_tokens} out "
+            f"/ {prompt_tokens + completion_tokens} tokens]{RESET}"
+        )
+    return lines
 
 
 def main():
@@ -57,8 +80,10 @@ def main():
             continue
 
         last_reply = str(reply).replace("🤖", "").replace("__LISTEN_LAST__", "").strip()
-        print(str(reply), "\n")
-        print("  (🔊 want sound? type `listen`  ·  stop: `stop`)\n")
+        print(str(reply))
+        for line in _trace_lines(agent):
+            print(line)
+        print("\n  (🔊 want sound? type `listen`  ·  stop: `stop`)\n")
 
 
 if __name__ == "__main__":

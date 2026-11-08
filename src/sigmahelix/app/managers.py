@@ -8,8 +8,10 @@ already speak, so presentation code never depends on storage details.
 import datetime
 import os
 import re
+from pathlib import Path
 from typing import Any
 
+from ..core.storage.repositories import RepositoryOperationError
 from .paths import data_dir as paths_data_dir
 from .paths import projects_dir as _projects_dir
 from .projects import PROJECTS_DIR, list_project_dirs
@@ -97,7 +99,10 @@ class TasksManager:
         task = self.find(task_id)
         if task is None:
             return f"Task ID {task_id} not found."
-        self.service.set_task_done(task_id, True)
+        try:
+            self.service.set_task_done(task_id, True)
+        except RepositoryOperationError as exc:
+            return f"🔒 {exc}"
         return "Task '{}' marked as completed.".format(task["name"])
 
     def delete_task(self, text: str) -> str:
@@ -354,8 +359,14 @@ class ProjectsManager:
         self.projects_dir = PROJECTS_DIR
 
     def scan(self) -> list[dict[str, Any]]:
-        """Scan every proven project and report git state and health."""
-        return self.service.scan_projects()
+        """Scan every proven project and report git state, health and runners."""
+        from .launchables import detect_launchables
+
+        rows = self.service.scan_projects()
+        for row in rows:
+            items = detect_launchables(Path(row["path"]))
+            row["launchables"] = [item.as_dict() for item in items]
+        return rows
 
     def list_projects(self, text):
         """List only directories that prove they are projects."""

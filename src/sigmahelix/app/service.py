@@ -18,8 +18,14 @@ from typing import Any
 from uuid import UUID
 
 from ..core.config import load_settings
-from ..core.models import Note, Task, TaskStatus
-from ..core.storage import AuditLog, Database, NoteRepository, TaskRepository
+from ..core.models import Note, QuestionStatus, Task, TaskQuestion, TaskStatus
+from ..core.storage import (
+    AuditLog,
+    Database,
+    NoteRepository,
+    TaskQuestionRepository,
+    TaskRepository,
+)
 from ..core.storage.repositories import RepositoryOperationError
 
 DEFAULT_TENANT = "local"
@@ -61,6 +67,34 @@ def note_to_dict(note: Note) -> dict[str, Any]:
     }
 
 
+def _readiness_of(questions: list[TaskQuestion]) -> dict[str, Any]:
+    """How close a task is to being answerable: the completion checkpoint."""
+    total = len(questions)
+    answered = sum(1 for q in questions if q.status is QuestionStatus.ANSWERED)
+    blocked = sum(1 for q in questions if q.status is QuestionStatus.BLOCKED)
+    return {
+        "questions_total": total,
+        "questions_answered": answered,
+        "questions_open": total - answered,
+        "questions_blocked": blocked,
+        "ready": total == answered,
+        "readiness": 100 if total == 0 else round(answered * 100 / total),
+    }
+
+
+def question_to_dict(question: TaskQuestion) -> dict[str, Any]:
+    """Project a task question onto the shape the UI expects."""
+    return {
+        "id": question.display_id,
+        "question": question.question,
+        "answer": question.answer,
+        "evidence": question.evidence,
+        "status": question.status.value,
+        "answered": question.status is QuestionStatus.ANSWERED,
+        "answered_at": _stamp(question.answered_at) if question.answered_at else None,
+    }
+
+
 class AppService:
     """Read and write user data through the durable core."""
 
@@ -72,6 +106,7 @@ class AppService:
         self.tenant_id = tenant_id
         self._tasks = TaskRepository(self.database)
         self._notes = NoteRepository(self.database)
+        self._questions = TaskQuestionRepository(self.database)
         self._audit = AuditLog(self.database)
         # Bring across anything the pre-merge JSON stores left behind. This is
         # idempotent: an already-imported snapshot is a no-op.
@@ -95,15 +130,34 @@ class AppService:
         self._audit.append(action, entity, entity_id, payload, tenant_id=self.tenant_id)
 
     # ---- tasks ------------------------------------------------------------
+    def _readiness(self, task_id: UUID) -> dict[str, Any]:
+        return _readiness_of(self._questions.list_for_task(task_id, self.tenant_id))
+
     def list_tasks(self) -> list[dict[str, Any]]:
-        return [task_to_dict(task) for task in self._tasks.list_all(self.tenant_id)]
+        by_task: dict[UUID, list[TaskQuestion]] = {}
+        for question in self._questions.list_all(self.tenant_id):
+            by_task.setdefault(question.task_id, []).append(question)
+        rows = []
+        for task in self._tasks.list_all(self.tenant_id):
+            questions = by_task.get(task.id, [])
+            record = task_to_dict(task)
+            record.update(_readiness_of(questions))
+            record["questions"] = [question_to_dict(q) for q in questions]
+            rows.append(record)
+        return rows
 
     def get_task(self, display_id: int) -> dict[str, Any] | None:
         record_id = self._record_id("tasks", display_id)
         if record_id is None:
             return None
         task = self._tasks.get(record_id, self.tenant_id)
-        return task_to_dict(task) if task is not None else None
+        if task is None:
+            return None
+        questions = self._questions.list_for_task(task.id, self.tenant_id)
+        record = task_to_dict(task)
+        record.update(_readiness_of(questions))
+        record["questions"] = [question_to_dict(q) for q in questions]
+        return record
 
     def tasks_due_between(self, start: date, end: date) -> list[dict[str, Any]]:
         """Tasks due on or after ``start`` and before ``end``, by due time."""
@@ -137,10 +191,34 @@ class AppService:
             str(task.id),
             {"display_id": task.display_id, "recurrence": task.recurrence},
         )
-        return task_to_dict(task)
+        record = task_to_dict(task)
+        record.update(self._readiness(task.id))
+        return record
+
+    def create_task_with_questions(
+        self,
+        title: str,
+        questions: list[str],
+        recurrence: str = "none",
+        due_at: datetime | None = None,
+    ) -> dict[str, Any]:
+        """Create a task and its questions in one go — the approval step.
+
+        The user approves a proposed question set, and only then does the task
+        exist. A question that is empty after trimming is dropped, not stored.
+        """
+        record = self.create_task(title, recurrence=recurrence, due_at=due_at)
+        task_id = self._record_id("tasks", record["id"])
+        if task_id is None:
+            return record
+        for text in questions:
+            cleaned = " ".join(str(text or "").split())
+            if cleaned:
+                self.add_question(record["id"], cleaned)
+        return self.get_task(record["id"]) or record
 
     def set_task_done(
-        self, display_id: int, done: bool = True
+        self, display_id: int, done: bool = True, force: bool = False
     ) -> dict[str, Any] | None:
         record_id = self._record_id("tasks", display_id)
         if record_id is None:
@@ -148,6 +226,13 @@ class AppService:
         task = self._tasks.get(record_id, self.tenant_id)
         if task is None:
             return None
+        if done and not force:
+            readiness = self._readiness(task.id)
+            if not readiness["ready"]:
+                raise RepositoryOperationError(
+                    f"task {display_id} still has {readiness['questions_open']} "
+                    "unanswered question(s); answer them or force the completion"
+                )
         updated = replace(
             task,
             status=TaskStatus.DONE if done else TaskStatus.TODO,
@@ -192,10 +277,113 @@ class AppService:
             return False
         deleted = self._tasks.delete(record_id, self.tenant_id)
         if deleted:
+            self._questions.delete_for_task(record_id, self.tenant_id)
             self._audit_write(
                 "task.deleted", "task", str(record_id), {"display_id": display_id}
             )
         return deleted
+
+    # ---- task questions ---------------------------------------------------
+    def questions_for(self, display_id: int) -> list[dict[str, Any]]:
+        task_id = self._record_id("tasks", display_id)
+        if task_id is None:
+            return []
+        return [
+            question_to_dict(q)
+            for q in self._questions.list_for_task(task_id, self.tenant_id)
+        ]
+
+    def add_question(self, display_id: int, question: str) -> dict[str, Any] | None:
+        task_id = self._record_id("tasks", display_id)
+        if task_id is None:
+            return None
+        record = self._questions.create(
+            TaskQuestion(
+                question=question,
+                task_id=task_id,
+                tenant_id=self.tenant_id,
+            )
+        )
+        self._audit_write(
+            "question.added",
+            "task",
+            str(task_id),
+            {"display_id": display_id, "question_id": record.display_id},
+        )
+        return question_to_dict(record)
+
+    def answer_question(
+        self,
+        display_id: int,
+        question_id: int,
+        answer: str,
+        evidence: str = "",
+    ) -> dict[str, Any] | None:
+        """Record the answer to one question. This is the checkpoint."""
+        task_id = self._record_id("tasks", display_id)
+        if task_id is None:
+            return None
+        target = next(
+            (
+                q
+                for q in self._questions.list_for_task(task_id, self.tenant_id)
+                if q.display_id == question_id
+            ),
+            None,
+        )
+        if target is None:
+            return None
+        cleaned = answer.strip()
+        if not cleaned:
+            raise ValueError("an answer cannot be empty")
+        now = datetime.now(UTC)
+        updated = replace(
+            target,
+            answer=cleaned,
+            evidence=evidence.strip(),
+            status=QuestionStatus.ANSWERED,
+            answered_at=now,
+            updated_at=now,
+        )
+        self._questions.update(updated)
+        self._audit_write(
+            "question.answered",
+            "task",
+            str(task_id),
+            {"display_id": display_id, "question_id": question_id},
+        )
+        return question_to_dict(updated)
+
+    def reopen_question(
+        self, display_id: int, question_id: int
+    ) -> dict[str, Any] | None:
+        task_id = self._record_id("tasks", display_id)
+        if task_id is None:
+            return None
+        target = next(
+            (
+                q
+                for q in self._questions.list_for_task(task_id, self.tenant_id)
+                if q.display_id == question_id
+            ),
+            None,
+        )
+        if target is None:
+            return None
+        updated = replace(
+            target,
+            status=QuestionStatus.OPEN,
+            answered_at=None,
+            updated_at=datetime.now(UTC),
+        )
+        self._questions.update(updated)
+        self._audit_write(
+            "question.reopened",
+            "task",
+            str(task_id),
+            {"display_id": display_id, "question_id": question_id},
+        )
+        return question_to_dict(updated)
 
     # ---- notes ------------------------------------------------------------
     def list_notes(self) -> list[dict[str, Any]]:
