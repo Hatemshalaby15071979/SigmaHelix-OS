@@ -17,27 +17,30 @@ from sigmahelix.app.managers import (
     TasksManager,
 )
 
-EXPECTED_REPOS = [
-    "Blue Waves Music Production",
-    "CompliProof",
-    "Dynamic-Ops-Automation-Engine",
-    "Helix-Education",
-    "Helix-Prime",
-    "L-D-Command-Center",
-    "RTA_command_center",
-    "Study-Studio",
-    "cx-sentiment-sentinel",
-    "live-support-assistant",
-    "wfm-forecasting-calculator",
-    "work-samples",
-]
-
 
 @pytest.fixture
 def offline_agent(monkeypatch):
     """Agent with LLM ping disabled to test deterministic routing."""
     monkeypatch.setattr(Agent, "_check_llm", lambda self, timeout=2.0: False)
     return Agent()
+
+
+@pytest.fixture
+def fake_projects(tmp_path, monkeypatch):
+    """A self-contained projects dir so the listing tests run on any machine.
+
+    The real ``cloned_repos`` folder only exists on the founder's machine; CI
+    has none. Point ``SIGMAHELIX_PROJECTS_DIR`` at a temp dir with a few proven
+    project folders instead of asserting on hardcoded names.
+    """
+    root = tmp_path / "cloned_repos"
+    names = ["Alpha Project", "beta-tool", "gamma_app"]
+    for name in names:
+        project = root / name
+        project.mkdir(parents=True)
+        (project / "pyproject.toml").write_text("")
+    monkeypatch.setenv("SIGMAHELIX_PROJECTS_DIR", str(root))
+    return names
 
 
 # ---------------- tasks ----------------
@@ -116,10 +119,10 @@ def test_calendar_schedule_and_read(offline_agent):
 # ---------------- projects + explorer (real filesystem) ----------------
 
 
-def test_projects_lists_all_repos(offline_agent):
+def test_projects_lists_all_repos(fake_projects):
     prj = ProjectsManager()
     listing = prj.list_projects("show projects")
-    for repo in EXPECTED_REPOS:
+    for repo in fake_projects:
         assert repo in listing, f"missing repo {repo}"
 
 
@@ -138,9 +141,13 @@ def test_agent_routes_tasks_offline(offline_agent):
     assert "audit expense receipts" in offline_agent.process_command("list tasks")
 
 
-def test_agent_routes_projects_offline(offline_agent):
-    out = offline_agent.process_command("show projects")
-    for repo in EXPECTED_REPOS:
+def test_agent_routes_projects_offline(fake_projects, monkeypatch):
+    # The agent caches its ProjectsManager at construction, so build it *after*
+    # the projects dir is pointed at the temp folder.
+    monkeypatch.setattr(Agent, "_check_llm", lambda self, timeout=2.0: False)
+    agent = Agent()
+    out = agent.process_command("show projects")
+    for repo in fake_projects:
         assert repo in out
 
 
