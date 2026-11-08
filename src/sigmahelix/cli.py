@@ -648,9 +648,7 @@ def build_parser() -> argparse.ArgumentParser:
         "decide", help="approve, reject or reopen a recommendation"
     )
     ledger_decide.add_argument("rec_id")
-    ledger_decide.add_argument(
-        "decision", choices=("approve", "reject", "reopen")
-    )
+    ledger_decide.add_argument("decision", choices=("approve", "reject", "reopen"))
     ledger_decide.add_argument("--note", default="")
     ledger_apply = ledger_sub.add_parser(
         "apply", help="apply an approved, whitelisted recommendation"

@@ -49,9 +49,7 @@ def _ns(**kw):
 def test_cli_ledger_verify_and_report(ledger, capsys):
     # Seed a turn so the report has something to aggregate.
     ledger.open_turn("s1", "fix the demo", "loop", "cloud")
-    ledger.close_turn(
-        ledger.turns()[-1]["id"], reply="done", outcome="acted"
-    )
+    ledger.close_turn(ledger.turns()[-1]["id"], reply="done", outcome="acted")
 
     # `verify` exits 0 and prints a confidence line.
     assert command_ledger(_ns(ledger_command="verify")) == EXIT_OK
@@ -60,9 +58,7 @@ def test_cli_ledger_verify_and_report(ledger, capsys):
 
     # `report --json --analyze` exits 0 and prints parseable JSON with both
     # the metrics and the computed recommendations.
-    code = command_ledger(
-        _ns(ledger_command="report", analyze=True, json=True)
-    )
+    code = command_ledger(_ns(ledger_command="report", analyze=True, json=True))
     assert code == EXIT_OK
     payload = json.loads(capsys.readouterr().out)
     assert payload["report"]["turns"] == 1

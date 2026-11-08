@@ -35,9 +35,7 @@ DEFAULT_TENANT = "local"
 #: 0011 and the coding brief: applying it would be a consequential side effect, so
 #: the founder routes it to the coding agent as a task instead. These are the only
 #: kinds that perform a real, reversible action when ``Ledger.apply`` runs.
-APPLIABLE_KINDS = frozenset(
-    {"config", "skill", "delete_plugin", "update_plugin"}
-)
+APPLIABLE_KINDS = frozenset({"config", "skill", "delete_plugin", "update_plugin"})
 
 _PERIOD = re.compile(r"^(\d+)([dhw])$")
 
@@ -155,9 +153,7 @@ def _steps_digest(rows: list[Any]) -> str:
     is derived from the table, never stored, so it cannot drift from the steps
     it describes.
     """
-    canonical = [
-        [row[field] for field in _STEP_DIGEST_FIELDS] for row in rows
-    ]
+    canonical = [[row[field] for field in _STEP_DIGEST_FIELDS] for row in rows]
     return hashlib.sha256(_canonical(canonical)).hexdigest()
 
 
@@ -189,9 +185,7 @@ def _since(period: str) -> str:
         raise ValueError("period must look like 7d, 24h or 2w")
     amount, unit = int(match.group(1)), match.group(2)
     if amount < 1 or amount > _MAX_PERIOD[unit]:
-        raise ValueError(
-            f"period must be between 1 and {_MAX_PERIOD[unit]} {unit}"
-        )
+        raise ValueError(f"period must be between 1 and {_MAX_PERIOD[unit]} {unit}")
     delta = {
         "d": timedelta(days=amount),
         "h": timedelta(hours=amount),
@@ -974,9 +968,11 @@ class Ledger:
         content = f"# {row['title']}\n\n{row['body'] or ''}\n"
         turns = evidence.get("turns") or []
         if turns:
-            content += "\n## Evidence (turn ids)\n\n" + "\n".join(
-                f"- {turn}" for turn in turns[:50]
-            ) + "\n"
+            content += (
+                "\n## Evidence (turn ids)\n\n"
+                + "\n".join(f"- {turn}" for turn in turns[:50])
+                + "\n"
+            )
         path.write_text(content, encoding="utf-8")
         return f"wrote skill file {path}"
 

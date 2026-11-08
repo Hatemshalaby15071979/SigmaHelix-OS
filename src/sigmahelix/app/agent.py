@@ -491,7 +491,9 @@ class Agent:
                         route = "tool"
                         if not self.plugins.is_enabled("projects"):
                             reply = self.plugins.off_message("projects")
-                            outcome = self._outcome_from_reply(reply, error, action=True)
+                            outcome = self._outcome_from_reply(
+                                reply, error, action=True
+                            )
                             return reply
                         reply = self._handle_create_project("", raw)
                         outcome = self._outcome_from_reply(reply, error, action=True)

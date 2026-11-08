@@ -174,5 +174,8 @@ the tests agree on the same state.
 
 ## Status
 
-This is a pre-1.0 build. The durable core, the desktop app, and the CLI are
-complete and tested; see `docs/execution/LEDGER.yaml` for the gate history.
+**Released: v1.0.0.** The durable core, the desktop app, the web UI and the CLI
+are complete and tested, and each tagged release ships a built wheel and sdist
+(see the GitHub **Releases** page). The full gate — format, lint, types, compile,
+tests and CLI smoke — runs in CI on every push; see
+`docs/execution/LEDGER.yaml` for the gate history.

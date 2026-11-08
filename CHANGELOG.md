@@ -6,6 +6,8 @@ All notable changes to SigmaHelix are recorded here. The format follows
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-11-08
+
 ### Added
 
 - **Documentation: SigmaHelix as the Hub.** `README.md` and `AGENTS.md` now state

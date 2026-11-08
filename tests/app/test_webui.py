@@ -149,14 +149,18 @@ def test_feedback_on_unknown_turn_is_400(server):
     status, body = call(base, "/api/metacognition?period=7d", token=token)
     real_id = json.loads(body)["turns"][-1]["id"]
     status, _ = call(
-        base, "/api/metacognition/feedback", token,
+        base,
+        "/api/metacognition/feedback",
+        token,
         {"turn_id": real_id, "verdict": "good"},
     )
     assert status == 200
 
     with pytest.raises(urllib.error.HTTPError) as exc:
         call(
-            base, "/api/metacognition/feedback", token,
+            base,
+            "/api/metacognition/feedback",
+            token,
             {"turn_id": "bogus", "verdict": "good"},
         )
     assert exc.value.code == 400
@@ -565,7 +569,10 @@ def test_an_illegal_decision_is_refused(server):
     _, body = call(base, "/api/metacognition/analyze", token, {"period": "7d"})
     rec = json.loads(body)["recommendations"][0]
     call(
-        base, "/api/metacognition/decide", token, {"rec_id": rec["id"], "decision": "approved"}
+        base,
+        "/api/metacognition/decide",
+        token,
+        {"rec_id": rec["id"], "decision": "approved"},
     )
     with pytest.raises(urllib.error.HTTPError) as exc:
         call(

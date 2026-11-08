@@ -378,9 +378,7 @@ def test_a_decision_cannot_be_made_twice_silently(ledger, database):
 
 def test_secrets_are_redacted_before_they_are_stored(ledger):
     secret = "sk-abcdefghijklmnop1234"
-    turn_id = ledger.open_turn(
-        "s1", f"my key is api_key={secret}", "loop", "cloud"
-    )
+    turn_id = ledger.open_turn("s1", f"my key is api_key={secret}", "loop", "cloud")
     ledger.add_step(
         turn_id,
         "tool_call",
@@ -628,9 +626,7 @@ def test_pushback_without_tools_detected_by_aggregate(ledger):
 # ---- item #8: apply() with an explicit, reversible kind whitelist --------------
 
 
-def _insert_recommendation(
-    ledger, kind, title, status="approved", evidence=None
-):
+def _insert_recommendation(ledger, kind, title, status="approved", evidence=None):
     """Insert a recommendation row directly so apply() can be tested in isolation."""
     import json
     import uuid
@@ -1004,7 +1000,12 @@ def test_agent_persists_steps_into_the_ledger(ledger, monkeypatch):
         }
         return "ran the tests"
 
-    for route in ("_direct_route", "_task_build_route", "_tool_route", "_keyword_route"):
+    for route in (
+        "_direct_route",
+        "_task_build_route",
+        "_tool_route",
+        "_keyword_route",
+    ):
         monkeypatch.setattr(agent, route, lambda text: None)
     monkeypatch.setattr(agent, "_llm_roundtrip", fake_llm_roundtrip)
 
