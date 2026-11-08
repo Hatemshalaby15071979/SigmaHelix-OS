@@ -38,7 +38,7 @@
     api(path, { method: "POST", body: JSON.stringify(payload || {}) });
 
   // ---------- navigation ----------
-  const VIEWS = ["chat", "tasks", "projects", "agenda", "notes", "skills"];
+  const VIEWS = ["chat", "tasks", "projects", "agenda", "notes", "skills", "settings"];
 
   function showView(name) {
     if (!VIEWS.includes(name)) name = "chat";
