@@ -210,6 +210,16 @@ RULES:
   tests, read the real failures, edit the code, run the tests again, then
   report what you changed and what still fails. A list of file names is never
   an answer to "fix this" — read the code, change it, and verify.
+- RESOLVE, DON'T ASK: when the user names a project, folder or path, resolve it
+  yourself with the project/file tools. Never ask for a path that is inside the
+  workspace, and never invent a limitation ("I can't reach that path"): if it is
+  inside the workspace root, you can read and edit it.
+- READ BEFORE YOU DECLARE BLOCKED: when something fails (a 401, an error, a
+  missing dependency), read the relevant code and state the exact requirement or
+  fix. Do not stop at "tell me which URL" — find out and tell them.
+- NEVER INVENT POLICY OR CAPABILITY LIMITS: state only what the ENABLED TOOLS
+  actually do. There is no hidden permission tier, no "Zone R", and no action you
+  refuse because of a rule that is not written here.
 - Tasks are question-driven. A task is only "ready" once every sub-question has
   an answer with evidence. The task-question actions are real; use them.
 - Decide NOTE vs TASK by what the user wants, not by which words appear:
@@ -297,14 +307,38 @@ class Agent:
             lines.append(f"- {name}: {desc or 'available on request'}")
         return "\n".join(lines) + "\n"
 
+    def workspace_block(self):
+        """The real workspace root, so the model never guesses or refuses it."""
+        try:
+            root = str(self._workspace_root())
+        except Exception:  # noqa: BLE001 - a bad path must never break the prompt
+            return ""
+        return (
+            "\n\n## WORKSPACE (authoritative)\n"
+            f"Your workspace root is: {root}\n"
+            "- Relative paths resolve against that root; absolute paths that sit\n"
+            "  inside it are valid and allowed.\n"
+            "- NEVER claim you cannot write to a path inside that root — the file\n"
+            "  tools are confined to it, not locked out of it.\n"
+            "- Resolve project names and folders yourself with the project tools;\n"
+            "  do not ask the user for a path that is inside the workspace.\n"
+            "- A locally running app URL (http://127.0.0.1:<port> or localhost) is a\n"
+            "  LINK to give the user, never something to fetch.\n"
+        )
+
     def system_prompt(self):
-        """Base persona + enabled capabilities + every active skill.
+        """Base persona + workspace + capabilities + every active skill.
 
         This is the single place the system prompt is built. Both the local
         Ollama call and the cloud call receive the same text, so switching
         provider can never drop the user's rules.
         """
-        base = SYSTEM_PROMPT + self.capability_block() + self.plugins.prompt_block()
+        base = (
+            SYSTEM_PROMPT
+            + self.workspace_block()
+            + self.capability_block()
+            + self.plugins.prompt_block()
+        )
         loop = self.loop_block()
         if loop:
             # Appended after rstrip so the loop block is the only difference
@@ -326,6 +360,11 @@ class Agent:
             "  failing code, edit it, run the tests again.\n"
             "- Use only the ENABLED TOOLS listed above; their arguments are\n"
             "  given there.\n"
+            "- Your workspace root is given above. Absolute paths inside it are\n"
+            "  valid for edit_file/file_operations — never refuse them as\n"
+            "  'outside my workspace'. Resolve project names yourself.\n"
+            "- Read the real code before you declare something blocked; a 401 or\n"
+            "  an error is a clue to inspect, not a reason to ask the user.\n"
             "- When the task is done (or blocked), answer with\n"
             '  {"action":"final","content":"","reply":"<what you did, what still '
             'fails>"}.\n'

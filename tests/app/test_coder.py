@@ -393,3 +393,22 @@ def test_loop_prompt_only_exists_in_cloud_mode(cloud_agent):
     assert "WORK LOOP" in cloud_agent.system_prompt()
     cloud_agent.model_kind = "local"
     assert "WORK LOOP" not in cloud_agent.system_prompt()
+
+
+def test_system_prompt_grounds_the_workspace_root(workspace):
+    """The model must know its real workspace root, so it never refuses it."""
+    from sigmahelix.app.paths import projects_dir
+
+    agent = agent_module.Agent()
+    prompt = agent.system_prompt()
+    assert str(projects_dir()) in prompt
+    assert "RESOLVE, DON'T ASK" in prompt
+    assert "127.0.0.1" in prompt  # localhost is a link, not a fetch target
+
+
+def test_loop_block_repeats_the_workspace_grounding(workspace):
+    agent = agent_module.Agent()
+    agent.model_kind = "cloud"
+    block = agent.loop_block()
+    assert "workspace root" in block.lower()
+    assert "outside my workspace" in block

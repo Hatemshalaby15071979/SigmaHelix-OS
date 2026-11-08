@@ -146,6 +146,15 @@ migration tests (`tests/core/test_migrations.py`) and extend
 - **No persona pickers.** Tommy's traits (honest/practical, human tone,
   evidence-aware, doer) are always on together. Do not reintroduce a switch that
   makes them exclusive — the old `persona_style` control did nothing.
+- **The prompt must ground the model in its real workspace.** `Agent.workspace_block()`
+  injects the absolute `projects_dir()` path into `system_prompt()` and tells the
+  model that absolute paths inside it are valid. Without this the model invents a
+  sandbox wall and refuses to edit a folder that is inside its own workspace.
+  The same block also forbids fetching `127.0.0.1`/localhost (it is a link, not a
+  fetch target), tells it to resolve project names itself, to read code before
+  declaring a task blocked, and never to invent policy ("Zone R"). Keep
+  `workspace_block()` in the base prompt (both modes) — only `loop_block()` may
+  differ between local and cloud.
 - **No hardcoded app names.** `launch <anything>` must resolve the name against
   the real projects (`projects.match_projects`) and start what the project
   actually contains (`launchables.detect_launchables`). Never reintroduce a

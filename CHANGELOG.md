@@ -156,6 +156,13 @@ All notable changes to SigmaHelix are recorded here. The format follows
 
 ### Fixed
 
+- **Tommy knows its real workspace root.** The system prompt now states the
+  absolute path of the projects directory and that absolute paths inside it are
+  valid, so it no longer claims it "can't reach" a folder that is inside its own
+  workspace. It is also told to resolve project names itself (never ask for a
+  path inside the workspace), to treat a localhost/`127.0.0.1` URL as a link and
+  never fetch it, to read the code before declaring a task blocked, and never to
+  invent policy or capability limits (no "Zone R").
 - The Projects view showed 0 and Tommy said "Projects directory not found" when
   run from an installed binary: the projects dir fell back to `~/projects`
   because there was no source checkout sibling. `projects_dir()` now discovers a
