@@ -1,7 +1,7 @@
-from concurrent.futures import ThreadPoolExecutor
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -9,8 +9,8 @@ import pytest
 from sigmahelix.core.models import (
     Approval,
     ApprovalStatus,
-    Evidence,
     Event,
+    Evidence,
     Note,
     Project,
     RiskLevel,
@@ -20,15 +20,16 @@ from sigmahelix.core.models import (
 from sigmahelix.core.storage import (
     ApprovalRepository,
     Database,
-    EvidenceRepository,
     EventRepository,
+    EvidenceRepository,
     NoteRepository,
     ProjectRepository,
     RepositoryOperationError,
     TaskRepository,
 )
+from sigmahelix.core.storage.migrations import MigrationRunner
 
-NOW = datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 11, 2, 12, 0, tzinfo=UTC)
 HASH = "b" * 64
 
 
@@ -45,7 +46,10 @@ def test_database_configures_wal_integrity_pragmas_and_private_file(database):
         assert connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
         assert connection.execute("PRAGMA busy_timeout").fetchone()[0] == 5000
         assert connection.execute("PRAGMA synchronous").fetchone()[0] == 2
-        assert connection.execute("PRAGMA user_version").fetchone()[0] == 13
+        assert (
+            connection.execute("PRAGMA user_version").fetchone()[0]
+            == MigrationRunner(database).latest_version
+        )
     assert database.path.stat().st_mode & 0o777 == 0o600
 
 
@@ -99,9 +103,9 @@ def test_all_six_repositories_round_trip_typed_records(database, tmp_path):
     ]
 
     for repository, record in repos:
-        repository.create(record)
-        assert repository.get(record.id, record.tenant_id) == record
-        assert repository.list_all(record.tenant_id) == [record]
+        created = repository.create(record)
+        assert repository.get(created.id, created.tenant_id) == created
+        assert repository.list_all(created.tenant_id) == [created]
 
 
 def test_task_repository_crud_uses_tenant_scoped_soft_delete(database, tmp_path):
@@ -203,8 +207,7 @@ def test_approval_repository_allows_recorded_status_transition(database):
 
 def test_concurrent_readers_use_independent_wal_connections(database):
     repository = TaskRepository(database)
-    task = Task("Concurrent read", created_at=NOW, updated_at=NOW)
-    repository.create(task)
+    task = repository.create(Task("Concurrent read", created_at=NOW, updated_at=NOW))
 
     with ThreadPoolExecutor(max_workers=8) as pool:
         results = list(pool.map(lambda _: repository.get(task.id), range(32)))

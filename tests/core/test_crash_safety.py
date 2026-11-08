@@ -1,9 +1,9 @@
 import os
-from pathlib import Path
 import select
 import signal
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 

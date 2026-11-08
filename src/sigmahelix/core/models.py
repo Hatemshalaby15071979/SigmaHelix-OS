@@ -5,17 +5,21 @@ from __future__ import annotations
 import json
 import math
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 from uuid import UUID, uuid4
 
 from .recurrence import RecurrenceRule
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _LOCAL_TENANT = "local"
+
+#: Recurrence labels a task can carry without a full :class:`TaskSeries`.
+SIMPLE_RECURRENCES = frozenset({"none", "daily", "weekly", "monthly"})
 
 
 class DomainValidationError(ValueError):
@@ -56,7 +60,7 @@ def _aware_utc(value: datetime, field_name: str) -> datetime:
         or value.utcoffset() is None
     ):
         raise DomainValidationError(f"{field_name} must be timezone-aware")
-    return value.astimezone(timezone.utc)
+    return value.astimezone(UTC)
 
 
 def _ordered_times(
@@ -109,9 +113,12 @@ class Task:
     status: TaskStatus = TaskStatus.TODO
     project_id: UUID | None = None
     due_at: datetime | None = None
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     tenant_id: str = _LOCAL_TENANT
+    pinned: bool = False
+    display_id: int = 0
+    recurrence: str = "none"
 
     def __post_init__(self) -> None:
         _non_empty(self.title, "title")
@@ -119,6 +126,16 @@ class Task:
             raise DomainValidationError("id must be a UUID")
         if not isinstance(self.status, TaskStatus):
             raise DomainValidationError("status must be a TaskStatus")
+        if not isinstance(self.pinned, bool):
+            raise DomainValidationError("pinned must be a boolean")
+        if isinstance(self.display_id, bool) or not isinstance(self.display_id, int):
+            raise DomainValidationError("display_id must be an integer")
+        if self.display_id < 0:
+            raise DomainValidationError("display_id must not be negative")
+        if self.recurrence not in SIMPLE_RECURRENCES:
+            raise DomainValidationError(
+                f"recurrence must be one of {sorted(SIMPLE_RECURRENCES)}"
+            )
         if self.project_id is not None and not isinstance(self.project_id, UUID):
             raise DomainValidationError("project_id must be a UUID or None")
         if not isinstance(self.description, str):
@@ -142,7 +159,7 @@ class TaskSeries:
     id: UUID = field(default_factory=uuid4)
     description: str = ""
     project_id: UUID | None = None
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     tenant_id: str = _LOCAL_TENANT
     active: bool = True
     last_materialized_through: date | None = None
@@ -198,14 +215,22 @@ class Note:
     content: str
     id: UUID = field(default_factory=uuid4)
     project_id: UUID | None = None
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     tenant_id: str = _LOCAL_TENANT
+    pinned: bool = False
+    display_id: int = 0
 
     def __post_init__(self) -> None:
         _non_empty(self.content, "content")
         if not isinstance(self.id, UUID):
             raise DomainValidationError("id must be a UUID")
+        if not isinstance(self.pinned, bool):
+            raise DomainValidationError("pinned must be a boolean")
+        if isinstance(self.display_id, bool) or not isinstance(self.display_id, int):
+            raise DomainValidationError("display_id must be an integer")
+        if self.display_id < 0:
+            raise DomainValidationError("display_id must not be negative")
         if self.project_id is not None and not isinstance(self.project_id, UUID):
             raise DomainValidationError("project_id must be a UUID or None")
         _non_empty(self.tenant_id, "tenant_id")
@@ -223,8 +248,8 @@ class Project:
     name: str
     root_path: Path
     id: UUID = field(default_factory=uuid4)
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+    updated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     last_scanned_at: datetime | None = None
     tenant_id: str = _LOCAL_TENANT
 
@@ -255,7 +280,7 @@ class Event:
     event_type: str
     payload: Mapping[str, Any]
     id: UUID = field(default_factory=uuid4)
-    occurred_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    occurred_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     tenant_id: str = _LOCAL_TENANT
 
     def __post_init__(self) -> None:
@@ -279,7 +304,7 @@ class Approval:
     expires_at: datetime
     id: UUID = field(default_factory=uuid4)
     status: ApprovalStatus = ApprovalStatus.PENDING
-    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     decided_at: datetime | None = None
     decided_by: str | None = None
     tenant_id: str = _LOCAL_TENANT
@@ -341,7 +366,7 @@ class Evidence:
     verified_by: str | None = None
     confidence: float = 1.0
     tags: tuple[str, ...] = ()
-    captured_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    captured_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     last_seen: datetime | None = None
     tenant_id: str = _LOCAL_TENANT
 

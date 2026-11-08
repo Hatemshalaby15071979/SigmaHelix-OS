@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping
 
 import yaml
 
@@ -89,7 +89,18 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
     home = _home(source)
     config_path = _config_path(source, home)
     data_home = _xdg_directory(source, "XDG_DATA_HOME", home / ".local" / "share")
-    database_path = (data_home / "sigmahelix" / "sigmahelix.db").resolve(strict=False)
+    # SIGMAHELIX_DATA_DIR is the app's single data directory: when it is set,
+    # the database lives inside it rather than in the XDG share directory.
+    data_override = source.get("SIGMAHELIX_DATA_DIR")
+    if data_override is not None:
+        override_path = Path(data_override).expanduser()
+        if not override_path.is_absolute():
+            raise ConfigError("SIGMAHELIX_DATA_DIR must be an absolute path")
+        database_path = (override_path / "sigmahelix.db").resolve(strict=False)
+    else:
+        database_path = (data_home / "sigmahelix" / "sigmahelix.db").resolve(
+            strict=False
+        )
     log_level = "INFO"
 
     if config_path.exists():

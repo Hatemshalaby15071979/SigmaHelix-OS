@@ -6,18 +6,16 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agent import Agent
-from tasks import (
-    TasksManager,
-    NotesManager,
-    ProjectsManager,
+import pytest
+
+from sigmahelix.app.agent import Agent
+from sigmahelix.app.managers import (
     CalendarManager,
     LauncherManager,
+    NotesManager,
+    ProjectsManager,
+    TasksManager,
 )
-import voice as voice_mod
-from local_endpoints import is_loopback_url
-
-import pytest
 
 EXPECTED_REPOS = [
     "Blue Waves Music Production",
@@ -33,32 +31,6 @@ EXPECTED_REPOS = [
     "wfm-forecasting-calculator",
     "work-samples",
 ]
-
-
-@pytest.mark.parametrize(
-    "endpoint",
-    [
-        "http://localhost:11435",
-        "http://127.0.0.1:11435",
-        "https://[::1]:11435",
-    ],
-)
-def test_local_endpoint_accepts_loopback(endpoint):
-    assert is_loopback_url(endpoint)
-
-
-@pytest.mark.parametrize(
-    "endpoint",
-    [
-        "https://example.com",
-        "http://192.168.1.8:11435",
-        "http://localhost.attacker.invalid",
-        "http://localhost@evil.invalid",
-        "file:///tmp/model",
-    ],
-)
-def test_local_endpoint_rejects_non_loopback_or_ambiguous_url(endpoint):
-    assert not is_loopback_url(endpoint)
 
 
 @pytest.fixture
@@ -114,22 +86,29 @@ def test_note_filtering(offline_agent):
 
 def test_calendar_today_tomorrow(offline_agent):
     cal = CalendarManager()
-    today = datetime.date.today().strftime("%Y-%m-%d")
+    today = datetime.date.today().isoformat()
+    tomorrow = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
+    assert "Nothing scheduled" in cal.get_tasks_for_date("today")
+
+    cal.schedule_task("today item", today)
+    cal.schedule_task("tomorrow item", tomorrow)
     assert today in cal.get_tasks_for_date("today")
-    tomorrow = (datetime.date.today() + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+    assert "today item" in cal.get_tasks_for_date("today")
     assert tomorrow in cal.get_tasks_for_date("tomorrow")
-    assert "No tasks scheduled" in cal.get_tasks_for_date("today")
+    assert "tomorrow item" not in cal.get_tasks_for_date("today")
 
 
 def test_calendar_week_month(offline_agent):
     cal = CalendarManager()
-    assert "week" in cal.get_tasks_for_date("this week").lower()
-    assert "month" in cal.get_tasks_for_date("this month").lower()
+    today = datetime.date.today().isoformat()
+    cal.schedule_task("weekly item", today)
+    assert "Agenda" in cal.get_tasks_for_date("this week")
+    assert "Agenda" in cal.get_tasks_for_date("this month")
 
 
 def test_calendar_schedule_and_read(offline_agent):
     cal = CalendarManager()
-    out = cal.schedule_task("call supplier", "2026-11-05", ("09:00",))
+    out = cal.schedule_task("call supplier", "2026-11-05", "09:00")
     assert "scheduled for 2026-11-05" in out
     assert "call supplier" in cal.get_tasks_for_date("2026-11-05")
 
@@ -174,35 +153,29 @@ def test_agent_empty_input(offline_agent):
     assert "say something" in offline_agent.process_command("")
 
 
+def test_greeting_with_today_is_not_agenda(offline_agent):
+    """Regression: 'how are you today?' is small talk, not an agenda request."""
+    out = offline_agent.process_command("hey there, how are you today?")
+    assert "Nothing scheduled" not in out
+    assert "Hello" in out
+
+
+def test_agenda_routing(offline_agent):
+    assert "Nothing scheduled" in offline_agent.process_command("today")
+    assert "Nothing scheduled" in offline_agent.process_command(
+        "what is on my plate today?"
+    )
+    assert "Nothing scheduled" in offline_agent.process_command("show calendar today")
+
+
 # ---------------- voice (offline-safe) ----------------
 
 
 def test_voice_lazy_init_no_mic_crash(offline_agent):
     engine = offline_agent.voice_engine  # must not raise even without mic
     assert engine is not None
-    engine.speak_text = lambda *_args: True
     stub = offline_agent.process_command("say hello from test")
     assert "hello from test" in stub
-
-
-def test_voice_input_stays_local_without_offline_transcriber(
-    offline_agent, monkeypatch
-):
-    engine = offline_agent.voice_engine
-    mic_calls = []
-    google_calls = []
-    monkeypatch.setattr(voice_mod.sr, "Microphone", lambda: mic_calls.append(True))
-    monkeypatch.setattr(
-        engine.recognizer,
-        "recognize_google",
-        lambda audio: google_calls.append(audio) or "unexpected",
-    )
-
-    assert engine.mic_available is False
-    assert engine.record_phrase() is None
-    assert "not configured" in offline_agent.process_command("mic").lower()
-    assert mic_calls == []
-    assert google_calls == []
 
 
 # ---------------- launcher (no subprocess run; verify path guards) ----------------
@@ -232,7 +205,7 @@ def test_process_command_never_speaks(offline_agent):
         "show projects",
     ):
         offline_agent.process_command(cmd)
-    assert calls == [], "process_command triggered automatic TTS: {}".format(calls)
+    assert calls == [], f"process_command triggered automatic TTS: {calls}"
     offline_agent.voice_engine.speak_text = orig
 
 

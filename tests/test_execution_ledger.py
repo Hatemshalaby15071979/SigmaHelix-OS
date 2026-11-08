@@ -1,5 +1,4 @@
 import pytest
-
 from scripts.ledger import LedgerError, next_ready_task, validate_ledger
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sqlite3
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -60,6 +61,15 @@ def _legacy_date(value: object, label: str) -> datetime:
     return datetime.combine(parsed, datetime.min.time(), UTC)
 
 
+def _next_display_id(connection: sqlite3.Connection, table: str, tenant_id: str) -> int:
+    """Next human-facing number for a table; callers pass a fixed table name."""
+    row = connection.execute(
+        f"SELECT COALESCE(MAX(display_id), 0) + 1 FROM {table} WHERE tenant_id = ?",
+        (tenant_id,),
+    ).fetchone()
+    return int(row[0])
+
+
 def _positive_id(value: object, label: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
         raise LegacyImportError(f"legacy {label} must be a positive integer")
@@ -76,7 +86,14 @@ def _normalize_tasks(
     for index, raw in enumerate(tasks):
         if not isinstance(raw, Mapping):
             raise LegacyImportError(f"legacy task {index} must be a mapping")
-        if not set(raw) <= {"id", "name", "frequency", "created", "completed"}:
+        if not set(raw) <= {
+            "id",
+            "name",
+            "frequency",
+            "created",
+            "completed",
+            "pinned",
+        }:
             raise LegacyImportError(f"legacy task {index} has unsupported fields")
         legacy_id = _positive_id(raw.get("id"), f"task {index} id")
         if legacy_id in seen_ids:
@@ -99,6 +116,9 @@ def _normalize_tasks(
             raise LegacyImportError(
                 f"legacy task {legacy_id} completed must be boolean"
             )
+        pinned = raw.get("pinned", False)
+        if not isinstance(pinned, bool):
+            raise LegacyImportError(f"legacy task {legacy_id} pinned must be boolean")
         normalized.append(
             {
                 "id": legacy_id,
@@ -106,6 +126,7 @@ def _normalize_tasks(
                 "frequency": frequency,
                 "created": created_at.date().isoformat(),
                 "completed": completed,
+                "pinned": pinned,
             }
         )
     return normalized
@@ -119,7 +140,7 @@ def _normalize_notes(notes: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]
     for index, raw in enumerate(notes):
         if not isinstance(raw, Mapping):
             raise LegacyImportError(f"legacy note {index} must be a mapping")
-        if not set(raw) <= {"id", "content", "created"}:
+        if not set(raw) <= {"id", "content", "created", "updated", "pinned"}:
             raise LegacyImportError(f"legacy note {index} has unsupported fields")
         legacy_id = _positive_id(raw.get("id"), f"note {index} id")
         if legacy_id in seen_ids:
@@ -132,11 +153,15 @@ def _normalize_notes(notes: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]
             )
         _secret_check(content, f"note {legacy_id}")
         created_at = _legacy_date(raw.get("created"), f"note {legacy_id} created")
+        pinned = raw.get("pinned", False)
+        if not isinstance(pinned, bool):
+            raise LegacyImportError(f"legacy note {legacy_id} pinned must be boolean")
         normalized.append(
             {
                 "id": legacy_id,
                 "content": content.strip(),
                 "created": created_at.date().isoformat(),
+                "pinned": pinned,
             }
         )
     return normalized
@@ -215,21 +240,24 @@ class LegacySessionImporter:
                 task_uuid = uuid5(
                     NAMESPACE_URL, f"sigmahelix:legacy:{source_id}:task:{task['id']}"
                 )
-                description = f"Imported from legacy session; prior frequency: {task['frequency']}"
+                display_id = _next_display_id(connection, "tasks", tenant_id)
                 connection.execute(
                     "INSERT INTO tasks (id, tenant_id, title, description, status, "
-                    "project_id, due_at, created_at, updated_at, deleted_at) "
-                    "VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, NULL)",
+                    "project_id, due_at, created_at, updated_at, pinned, display_id, "
+                    "recurrence, deleted_at) "
+                    "VALUES (?, ?, ?, '', ?, NULL, NULL, ?, ?, ?, ?, ?, NULL)",
                     (
                         str(task_uuid),
                         tenant_id,
                         task["name"],
-                        description,
                         TaskStatus.DONE.value
                         if task["completed"]
                         else TaskStatus.TODO.value,
                         created.isoformat(),
                         created.isoformat(),
+                        int(task["pinned"]),
+                        display_id,
+                        task["frequency"],
                     ),
                 )
             for note in normalized_notes:
@@ -237,15 +265,19 @@ class LegacySessionImporter:
                 note_uuid = uuid5(
                     NAMESPACE_URL, f"sigmahelix:legacy:{source_id}:note:{note['id']}"
                 )
+                display_id = _next_display_id(connection, "notes", tenant_id)
                 connection.execute(
                     "INSERT INTO notes (id, tenant_id, content, project_id, created_at, "
-                    "updated_at, deleted_at) VALUES (?, ?, ?, NULL, ?, ?, NULL)",
+                    "updated_at, pinned, display_id, deleted_at) "
+                    "VALUES (?, ?, ?, NULL, ?, ?, ?, ?, NULL)",
                     (
                         str(note_uuid),
                         tenant_id,
                         note["content"],
                         created.isoformat(),
                         created.isoformat(),
+                        int(note["pinned"]),
+                        display_id,
                     ),
                 )
             imported_at = datetime.now(UTC).isoformat()

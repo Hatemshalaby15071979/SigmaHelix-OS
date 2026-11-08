@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from threading import RLock
-from typing import Any, Callable
+from typing import Any
 from uuid import UUID, uuid4
 
-from ..models import Event
 from ..logging import redact_text
+from ..models import Event
 from .database import Database
 from .repositories import EventRepository
 
@@ -43,7 +43,7 @@ class EventBusError(RuntimeError):
 class EventDispatchError(EventBusError):
     """Reports subscriber failures after the event has already been persisted."""
 
-    def __init__(self, envelope: "EventEnvelope", failures: tuple[Exception, ...]):
+    def __init__(self, envelope: EventEnvelope, failures: tuple[Exception, ...]):
         self.envelope = envelope
         self.failures = failures
         super().__init__(

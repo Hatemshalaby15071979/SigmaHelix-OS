@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 from collections.abc import Callable
 from datetime import UTC, date, datetime, time
 from typing import Any
@@ -53,7 +54,7 @@ def _rule_from_json(value: str) -> RecurrenceRule:
     )
 
 
-def _series_from_row(row) -> TaskSeries:
+def _series_from_row(row: sqlite3.Row) -> TaskSeries:
     return TaskSeries(
         id=UUID(row["id"]),
         tenant_id=row["tenant_id"],
@@ -182,6 +183,13 @@ class OccurrenceService:
                     NAMESPACE_URL,
                     f"sigmahelix:series:{series.id}:occurrence:{scheduled_for.isoformat()}",
                 )
+                next_display_id = int(
+                    connection.execute(
+                        "SELECT COALESCE(MAX(display_id), 0) + 1 FROM tasks "
+                        "WHERE tenant_id = ?",
+                        (series.tenant_id,),
+                    ).fetchone()[0]
+                )
                 task = Task(
                     title=series.title,
                     id=task_id,
@@ -192,15 +200,16 @@ class OccurrenceService:
                     created_at=now,
                     updated_at=now,
                     tenant_id=series.tenant_id,
+                    display_id=next_display_id,
                 )
                 occurrence_id = uuid5(
                     NAMESPACE_URL,
                     f"sigmahelix:series-occurrence:{series.id}:{scheduled_for.isoformat()}",
                 )
                 connection.execute(
-                    "INSERT INTO tasks (id, tenant_id, title, description, status, project_id, "
-                    "due_at, created_at, updated_at, deleted_at) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)",
+                    "INSERT INTO tasks (id, tenant_id, title, description, status, "
+                    "project_id, due_at, created_at, updated_at, display_id, deleted_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)",
                     (
                         str(task.id),
                         task.tenant_id,
@@ -211,6 +220,7 @@ class OccurrenceService:
                         task.due_at.isoformat() if task.due_at else None,
                         task.created_at.isoformat(),
                         task.updated_at.isoformat(),
+                        task.display_id,
                     ),
                 )
                 connection.execute(
@@ -347,7 +357,7 @@ class OccurrenceService:
 
     @staticmethod
     def _append_event(
-        connection,
+        connection: sqlite3.Connection,
         tenant_id: str,
         event_type: str,
         payload: dict[str, str],

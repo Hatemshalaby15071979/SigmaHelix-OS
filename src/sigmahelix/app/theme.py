@@ -14,11 +14,13 @@ COLORS = {
     "bg_main": "#1a1a2e",
     "bg_panel": "#16213e",
     "accent": "#00d4aa",
+    "accent_hover": "#00f5c4",
     "text_main": "#e0e0ff",
     "text_dim": "#a8a8cc",
     "warning": "#ff6b6b",
     "success": "#00d4aa",
     "panel_border": "#2a2a4e",
+    "frame": "#0f0f23",
 }
 
 FONT_MAIN = ("Segoe UI", 14)

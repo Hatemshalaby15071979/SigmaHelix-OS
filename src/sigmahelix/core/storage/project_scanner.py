@@ -8,11 +8,11 @@ import shutil
 import subprocess
 import sys
 import time
+from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Callable, Iterable
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from ..models import Project
@@ -87,7 +87,7 @@ class ProjectScan:
     entrypoints: tuple[str, ...]
     findings: tuple[str, ...]
     health: str
-    artifacts: tuple["ProjectArtifact", ...] = ()
+    artifacts: tuple[ProjectArtifact, ...] = ()
     health_score: int = 100
 
 

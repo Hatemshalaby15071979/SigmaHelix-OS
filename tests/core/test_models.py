@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from uuid import UUID
 
@@ -8,8 +8,8 @@ from sigmahelix.core.models import (
     Approval,
     ApprovalStatus,
     DomainValidationError,
-    Evidence,
     Event,
+    Evidence,
     Note,
     Project,
     RiskLevel,
@@ -17,7 +17,7 @@ from sigmahelix.core.models import (
     TaskStatus,
 )
 
-NOW = datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 11, 2, 12, 0, tzinfo=UTC)
 HASH = "a" * 64
 
 

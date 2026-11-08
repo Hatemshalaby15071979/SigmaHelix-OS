@@ -9,7 +9,7 @@ import time
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
-from .project_scanner import ProjectScanBatch, ProjectScanner, _PRUNED_DIRS
+from .project_scanner import _PRUNED_DIRS, ProjectScanBatch, ProjectScanner
 
 ScanCallback = Callable[[ProjectScanBatch], None]
 

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import sqlite3
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Callable, Mapping
+from typing import Any
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from .audit import AuditLog
@@ -56,7 +58,7 @@ def _aware(value: datetime, label: str) -> datetime:
     return value.astimezone(UTC)
 
 
-def _state_from_row(row) -> AlarmState:
+def _state_from_row(row: sqlite3.Row) -> AlarmState:
     return AlarmState(
         UUID(row["notification_id"]),
         row["tenant_id"],

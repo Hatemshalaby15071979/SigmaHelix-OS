@@ -4,17 +4,18 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from dataclasses import dataclass
-from datetime import datetime, timezone
+from collections.abc import Callable
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Callable, Generic, TypeVar
+from typing import Generic, TypeVar
 from uuid import UUID
 
 from ..models import (
     Approval,
     ApprovalStatus,
-    Evidence,
     Event,
+    Evidence,
     Note,
     Project,
     RiskLevel,
@@ -41,6 +42,7 @@ class _Codec(Generic[T]):
     mutable: bool = True
     read_table: str | None = None
     insert_related: Callable[[sqlite3.Connection, T], None] | None = None
+    allocates_display_id: bool = False
 
 
 def _time(value: datetime | None) -> str | None:
@@ -66,6 +68,9 @@ def _task_encode(record: Task) -> dict[str, object]:
         "due_at": _time(record.due_at),
         "created_at": _time(record.created_at),
         "updated_at": _time(record.updated_at),
+        "pinned": int(record.pinned),
+        "display_id": record.display_id,
+        "recurrence": record.recurrence,
     }
 
 
@@ -80,6 +85,9 @@ def _task_decode(row: sqlite3.Row) -> Task:
         due_at=_parse_time(row["due_at"]),
         created_at=datetime.fromisoformat(row["created_at"]),
         updated_at=datetime.fromisoformat(row["updated_at"]),
+        pinned=bool(row["pinned"]),
+        display_id=int(row["display_id"]),
+        recurrence=row["recurrence"],
     )
 
 
@@ -91,6 +99,8 @@ def _note_encode(record: Note) -> dict[str, object]:
         "project_id": str(record.project_id) if record.project_id else None,
         "created_at": _time(record.created_at),
         "updated_at": _time(record.updated_at),
+        "pinned": int(record.pinned),
+        "display_id": record.display_id,
     }
 
 
@@ -102,6 +112,8 @@ def _note_decode(row: sqlite3.Row) -> Note:
         project_id=_uuid(row["project_id"]),
         created_at=datetime.fromisoformat(row["created_at"]),
         updated_at=datetime.fromisoformat(row["updated_at"]),
+        pinned=bool(row["pinned"]),
+        display_id=int(row["display_id"]),
     )
 
 
@@ -236,10 +248,28 @@ class SqliteRepository(Generic[T]):
             f"VALUES ({placeholders})"
         )
         with self.database.transaction() as connection:
+            if self.codec.allocates_display_id and values.get("display_id") == 0:
+                values["display_id"] = self._next_display_id(
+                    connection, str(values["tenant_id"])
+                )
+                record = replace(record, display_id=values["display_id"])  # type: ignore[type-var]
             connection.execute(sql, tuple(values[column] for column in columns))
             if self.codec.insert_related is not None:
                 self.codec.insert_related(connection, record)
         return record
+
+    def _next_display_id(self, connection: sqlite3.Connection, tenant_id: str) -> int:
+        """Allocate the next human-facing number inside the write transaction.
+
+        Numbers are never reused, including for soft-deleted records, so an
+        "ID 7" the user saw yesterday always refers to the same record.
+        """
+        row = connection.execute(
+            f"SELECT COALESCE(MAX(display_id), 0) + 1 FROM {self.codec.table} "
+            "WHERE tenant_id = ?",
+            (tenant_id,),
+        ).fetchone()
+        return int(row[0])
 
     def get(self, record_id: UUID, tenant_id: str = "local") -> T | None:
         sql = f"SELECT * FROM {self.codec.read_table or self.codec.table} WHERE id = ? AND tenant_id = ?"
@@ -284,7 +314,7 @@ class SqliteRepository(Generic[T]):
             raise RepositoryOperationError(
                 f"{self.codec.table} records cannot be deleted"
             )
-        deleted_at = datetime.now(timezone.utc).isoformat()
+        deleted_at = datetime.now(UTC).isoformat()
         with self.database.transaction() as connection:
             cursor = connection.execute(
                 f"UPDATE {self.codec.table} SET deleted_at = ? "
@@ -310,11 +340,15 @@ class TaskRepository(SqliteRepository[Task]):
                     "due_at",
                     "created_at",
                     "updated_at",
+                    "pinned",
+                    "display_id",
+                    "recurrence",
                 ),
                 _task_encode,
                 _task_decode,
-                "created_at, id",
+                "pinned DESC, display_id, id",
                 soft_delete=True,
+                allocates_display_id=True,
             ),
         )
 
@@ -332,11 +366,14 @@ class NoteRepository(SqliteRepository[Note]):
                     "project_id",
                     "created_at",
                     "updated_at",
+                    "pinned",
+                    "display_id",
                 ),
                 _note_encode,
                 _note_decode,
-                "updated_at, id",
+                "pinned DESC, display_id, id",
                 soft_delete=True,
+                allocates_display_id=True,
             ),
         )
 

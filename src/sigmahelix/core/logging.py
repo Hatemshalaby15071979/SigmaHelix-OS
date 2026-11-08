@@ -7,6 +7,7 @@ import logging
 import os
 import re
 from datetime import UTC, datetime
+from io import TextIOWrapper
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 from typing import Any
@@ -88,7 +89,7 @@ class RedactingJSONFormatter(logging.Formatter):
 class _PrivateTimedRotatingFileHandler(TimedRotatingFileHandler):
     """Create each active log file with owner-only permissions."""
 
-    def _open(self):
+    def _open(self) -> TextIOWrapper[Any]:
         stream = super()._open()
         try:
             os.chmod(self.baseFilename, 0o600)

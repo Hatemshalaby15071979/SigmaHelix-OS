@@ -1,5 +1,5 @@
-from threading import Event, Lock
 import time
+from threading import Event, Lock
 
 from sigmahelix.core.storage import Database, ProjectScanner, ProjectWatch
 

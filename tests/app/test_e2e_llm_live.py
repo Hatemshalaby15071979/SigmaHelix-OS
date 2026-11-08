@@ -12,14 +12,12 @@ import urllib.request
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
-from agent import OLLAMA_HOSTS, OLLAMA_MODEL
 
-import agent as agent_mod
+import sigmahelix.app.agent as agent_mod
+from sigmahelix.app.agent import OLLAMA_HOSTS, OLLAMA_MODEL
 
 
 def _server_up() -> bool:
-    if not OLLAMA_HOSTS:
-        return False
     try:
         urllib.request.urlopen(f"{OLLAMA_HOSTS[0]}/api/tags", timeout=2)
         return True
@@ -28,8 +26,6 @@ def _server_up() -> bool:
 
 
 def _models() -> list:
-    if not OLLAMA_HOSTS:
-        return []
     try:
         with urllib.request.urlopen(f"{OLLAMA_HOSTS[0]}/api/tags", timeout=2) as r:
             return [m["name"] for m in json.loads(r.read())["models"]]
@@ -37,11 +33,41 @@ def _models() -> list:
         return []
 
 
+def _can_generate() -> bool:
+    """A listed model is not a usable model — it still has to load.
+
+    On a small GPU the 9B weights can fail with an out-of-memory error while
+    ``/api/tags`` happily lists them, so probe a real one-token generation.
+    """
+    if OLLAMA_MODEL not in _models():
+        return False
+    payload = json.dumps(
+        {
+            "model": OLLAMA_MODEL,
+            "prompt": "hi",
+            "stream": False,
+            "options": {"num_predict": 1},
+        }
+    ).encode()
+    req = urllib.request.Request(
+        f"{OLLAMA_HOSTS[0]}/api/generate",
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            body = json.loads(r.read())
+    except Exception:
+        return False
+    return not body.get("error")
+
+
 SERVER_UP = _server_up()
 
 requires_ollama = pytest.mark.skipif(
-    not SERVER_UP or OLLAMA_MODEL not in _models(),
-    reason=f"Ollama/{OLLAMA_MODEL} not reachable at {OLLAMA_HOSTS}",
+    not SERVER_UP or not _can_generate(),
+    reason=f"Ollama/{OLLAMA_MODEL} not usable at {OLLAMA_HOSTS}",
 )
 
 

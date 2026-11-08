@@ -1,5 +1,5 @@
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -12,8 +12,9 @@ from sigmahelix.core.storage import (
     MigrationRunner,
     TaskRepository,
 )
+from sigmahelix.core.storage.migrations import CORE_MIGRATIONS
 
-NOW = datetime(2026, 11, 2, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 11, 2, 12, 0, tzinfo=UTC)
 
 
 def _version(database: Database) -> int:
@@ -30,12 +31,14 @@ def _application_objects(database: Database) -> set[tuple[str, str]]:
     return {(row["type"], row["name"]) for row in rows}
 
 
-def test_migration_runner_applies_v0_to_v13_and_rolls_back_empty_database(tmp_path):
+def test_migration_runner_applies_every_migration_and_rolls_back_empty_database(
+    tmp_path,
+):
     database = Database(tmp_path / "migrations.db")
     runner = MigrationRunner(database)
 
     assert runner.current_version() == 0
-    assert runner.upgrade() == 13
+    assert runner.upgrade() == runner.latest_version
     assert ("table", "tasks") in _application_objects(database)
     assert ("table", "audit_log") in _application_objects(database)
     assert ("table", "event_stream") in _application_objects(database)
@@ -62,21 +65,22 @@ def test_migration_runner_applies_v0_to_v13_and_rolls_back_empty_database(tmp_pa
 
     assert runner.downgrade(0) == 0
     assert _application_objects(database) == set()
-    assert runner.upgrade() == 13
-    assert _version(database) == 13
+    assert runner.upgrade() == runner.latest_version
+    assert _version(database) == runner.latest_version
 
 
 def test_migration_runner_refuses_downgrade_when_it_would_drop_records(tmp_path):
     database = Database(tmp_path / "migration-data.db")
     database.initialize()
-    task = Task("Keep this record", created_at=NOW, updated_at=NOW)
-    TaskRepository(database).create(task)
+    task = TaskRepository(database).create(
+        Task("Keep this record", created_at=NOW, updated_at=NOW)
+    )
     runner = MigrationRunner(database)
 
     with pytest.raises(MigrationDataLossError, match="tasks contains records"):
         runner.downgrade(0)
 
-    assert runner.current_version() == 1
+    assert runner.current_version() == runner.latest_version
     assert TaskRepository(database).get(task.id) == task
 
 
@@ -106,7 +110,9 @@ def test_migration_runner_rejects_untracked_and_newer_schemas(tmp_path):
 
     newer = Database(tmp_path / "newer.db")
     with newer.connection() as connection:
-        connection.execute("PRAGMA user_version = 14")
+        connection.execute(
+            f"PRAGMA user_version = {MigrationRunner(newer).latest_version + 1}"
+        )
     with pytest.raises(MigrationError, match="newer than supported"):
         MigrationRunner(newer).upgrade()
 
@@ -121,25 +127,12 @@ def test_upgrade_and_downgrade_targets_cannot_move_in_the_wrong_direction(tmp_pa
     extended_runner = MigrationRunner(
         database,
         migrations=(
-            Migration(1, "v1", "", ""),
-            Migration(2, "v2", "", ""),
-            Migration(3, "v3", "", ""),
-            Migration(4, "v4", "", ""),
-            Migration(5, "v5", "", ""),
-            Migration(6, "v6", "", ""),
-            Migration(7, "v7", "", ""),
-            Migration(8, "v8", "", ""),
-            Migration(9, "v9", "", ""),
-            Migration(10, "v10", "", ""),
-            Migration(11, "v11", "", ""),
-            Migration(12, "v12", "", ""),
-            Migration(13, "v13", "", ""),
-            Migration(14, "v14", "", ""),
-            Migration(15, "v15", "", ""),
+            *CORE_MIGRATIONS,
+            Migration(MigrationRunner(database).latest_version + 1, "next", "", ""),
         ),
     )
     with pytest.raises(MigrationError, match="above the current version"):
-        extended_runner.downgrade(target_version=14)
+        extended_runner.downgrade(target_version=runner.latest_version + 1)
 
 
 def test_migration_versions_must_be_contiguous(tmp_path):
@@ -175,7 +168,7 @@ def test_alarm_migration_backfills_existing_notifications(tmp_path):
             (NOW.isoformat(),),
         )
 
-    assert runner.upgrade() == 13
+    assert runner.upgrade() == runner.latest_version
     with database.connection() as connection:
         row = connection.execute(
             "SELECT state FROM notification_alarm_states WHERE notification_id = ?",
@@ -210,7 +203,7 @@ def test_health_migration_backfills_old_snapshots_and_batch_membership(tmp_path)
             (snapshot_id, project_id, NOW.isoformat()),
         )
 
-    assert runner.upgrade() == 13
+    assert runner.upgrade() == runner.latest_version
     with database.connection() as connection:
         snapshot = connection.execute(
             "SELECT batch_id, health_score FROM project_scan_snapshots WHERE id = ?",

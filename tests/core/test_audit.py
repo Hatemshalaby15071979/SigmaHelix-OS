@@ -1,6 +1,6 @@
+import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
-import sqlite3
 
 import pytest
 

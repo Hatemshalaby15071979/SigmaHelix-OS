@@ -7,7 +7,6 @@ import pytest
 
 from sigmahelix.core.storage import AuditLog, Database, LauncherError, LauncherService
 
-
 NOW = datetime(2026, 11, 2, 12, 0, tzinfo=UTC)
 
 

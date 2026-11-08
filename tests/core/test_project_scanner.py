@@ -9,7 +9,6 @@ from sigmahelix.core.storage import (
     ProjectScanner,
 )
 
-
 NOW = datetime(2026, 11, 2, 12, 0, tzinfo=UTC)
 
 

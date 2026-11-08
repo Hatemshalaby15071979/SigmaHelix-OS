@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import sqlite3
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -109,7 +110,7 @@ def _payload_json(payload: Mapping[str, Any]) -> str:
         raise SchedulerError("job payload must contain finite JSON values") from exc
 
 
-def _job_from_row(row) -> ScheduledJob:
+def _job_from_row(row: sqlite3.Row) -> ScheduledJob:
     return ScheduledJob(
         id=UUID(row["id"]),
         tenant_id=row["tenant_id"],

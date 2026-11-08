@@ -1,5 +1,5 @@
-from datetime import date, datetime, timedelta
 import random
+from datetime import date, datetime, timedelta
 
 import pytest
 
@@ -7,8 +7,8 @@ from sigmahelix.core.recurrence import (
     RecurrenceError,
     RecurrenceFrequency,
     RecurrenceRule,
-    occurs_on,
     occurrences,
+    occurs_on,
 )
 
 

@@ -79,7 +79,7 @@ def test_live_legacy_managers_import_once_with_durable_receipts(database):
         "Review migration plan",
         "Send follow-up",
     ]
-    assert imported_tasks[0].description.endswith("frequency: weekly")
+    assert imported_tasks[0].recurrence == "weekly"
     assert imported_tasks[1].status.value == "done"
     assert [note.content for note in NoteRepository(database).list_all()] == [
         "Talked through the SQLite rollout."
@@ -136,7 +136,11 @@ def test_legacy_import_marker_prevents_downgrade_that_loses_idempotence(database
     tasks, notes = _managers()
     LegacySessionImporter(database).import_managers(SOURCE_ID, tasks, notes)
 
-    with pytest.raises(MigrationDataLossError, match="legacy_imports contains records"):
+    # The newest migration also refuses to roll back while tasks exist, so the
+    # import receipt is protected twice over.
+    with pytest.raises(MigrationDataLossError, match="tasks contains records"):
         MigrationRunner(database).downgrade(3)
 
-    assert MigrationRunner(database).current_version() == 4
+    assert MigrationRunner(database).current_version() == (
+        MigrationRunner(database).latest_version
+    )

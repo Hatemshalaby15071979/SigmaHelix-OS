@@ -3,7 +3,8 @@
 SigmaHelix — console entrypoint.
 Interactive REPL on top of the LLM-first agent:
 
-    python console_os.py              # GUI available via main.py
+    sigmahelix chat                   # interactive REPL
+    sigmahelix                        # desktop GUI
 
 TTS is ON DEMAND only: `listen` re-speaks the last reply as sound,
 `stop` cuts off speech. Nothing is spoken automatically.
@@ -12,17 +13,17 @@ TTS is ON DEMAND only: `listen` re-speaks the last reply as sound,
 import signal
 import sys
 
-from agent import Agent
+from .agent import Agent
 
 BANNER = """══════════════════════════════════════════════════
- SIGMAHELIX — personal assistant (local LLM)
+ SIGMAHELIX — Helix (local LLM)
 ══════════════════════════════════════════════════"""
 
 
 def main():
     agent = Agent()
     mode = (
-        "🤖 local model: {} @ {}".format(agent.model, agent.host)
+        f"🤖 local model: {agent.model_name} @ {agent.host}"
         if agent.llm_available
         else "🟡 LLM offline — keyword mode (start server to enable chat)"
     )

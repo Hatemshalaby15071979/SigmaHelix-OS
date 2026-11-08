@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import re
 import sqlite3
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 from .database import Database
 from .schema import SCHEMA_V1
@@ -617,6 +617,48 @@ BEFORE UPDATE ON project_scan_snapshots BEGIN
 END;
 """,
         rollback_requires_empty=("project_scan_batches", "project_scan_snapshots"),
+    ),
+    Migration(
+        version=14,
+        name="task_and_note_pinning_v14",
+        up_sql="""
+ALTER TABLE tasks ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0 CHECK(pinned IN (0, 1));
+ALTER TABLE tasks ADD COLUMN display_id INTEGER NOT NULL DEFAULT 0 CHECK(display_id >= 0);
+ALTER TABLE tasks ADD COLUMN recurrence TEXT NOT NULL DEFAULT 'none'
+    CHECK(recurrence IN ('none', 'daily', 'weekly', 'monthly'));
+ALTER TABLE notes ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0 CHECK(pinned IN (0, 1));
+ALTER TABLE notes ADD COLUMN display_id INTEGER NOT NULL DEFAULT 0 CHECK(display_id >= 0);
+
+UPDATE tasks SET display_id = (
+    SELECT COUNT(*) FROM tasks AS earlier
+    WHERE earlier.tenant_id = tasks.tenant_id AND earlier.rowid <= tasks.rowid
+);
+UPDATE notes SET display_id = (
+    SELECT COUNT(*) FROM notes AS earlier
+    WHERE earlier.tenant_id = notes.tenant_id AND earlier.rowid <= notes.rowid
+);
+
+CREATE UNIQUE INDEX idx_tasks_tenant_display_id
+    ON tasks(tenant_id, display_id) WHERE deleted_at IS NULL;
+CREATE UNIQUE INDEX idx_notes_tenant_display_id
+    ON notes(tenant_id, display_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_tasks_tenant_pinned
+    ON tasks(tenant_id, pinned, display_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_notes_tenant_pinned
+    ON notes(tenant_id, pinned, display_id) WHERE deleted_at IS NULL;
+""",
+        down_sql="""
+DROP INDEX IF EXISTS idx_notes_tenant_pinned;
+DROP INDEX IF EXISTS idx_tasks_tenant_pinned;
+DROP INDEX IF EXISTS idx_notes_tenant_display_id;
+DROP INDEX IF EXISTS idx_tasks_tenant_display_id;
+ALTER TABLE notes DROP COLUMN display_id;
+ALTER TABLE notes DROP COLUMN pinned;
+ALTER TABLE tasks DROP COLUMN recurrence;
+ALTER TABLE tasks DROP COLUMN display_id;
+ALTER TABLE tasks DROP COLUMN pinned;
+""",
+        rollback_requires_empty=("tasks", "notes"),
     ),
 )
 

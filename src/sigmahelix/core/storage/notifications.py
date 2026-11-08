@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import re
 import shutil
+import sqlite3
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Callable
 from uuid import UUID, uuid4
 
 from ..logging import redact_text
@@ -55,7 +56,7 @@ def _send_notify_send(title: str, body: str) -> bool | None:
     return result.returncode == 0
 
 
-def _row_to_notification(row) -> Notification:
+def _row_to_notification(row: sqlite3.Row) -> Notification:
     return Notification(
         UUID(row["id"]),
         row["tenant_id"],

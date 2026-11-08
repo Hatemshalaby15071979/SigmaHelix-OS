@@ -11,6 +11,7 @@ from sigmahelix.core.storage import (
     Database,
     DatabaseBackup,
     EventRepository,
+    MigrationRunner,
     TaskRepository,
 )
 
@@ -22,8 +23,7 @@ def _digest(path):
 def test_export_and_restore_round_trip_byte_identically(tmp_path):
     source = Database(tmp_path / "source" / "sigmahelix.db")
     source.initialize()
-    task = Task("Durable task")
-    TaskRepository(source).create(task)
+    task = TaskRepository(source).create(Task("Durable task"))
     EventRepository(source).create(Event("task.created", {"id": str(task.id)}))
     AuditLog(source).append("task.created", "task", str(task.id), {"ok": True})
 
@@ -36,7 +36,7 @@ def test_export_and_restore_round_trip_byte_identically(tmp_path):
     assert manifest == restored_manifest
     assert manifest.size_bytes == backup_path.stat().st_size
     assert manifest.database_sha256 == _digest(backup_path) == _digest(restored_path)
-    assert manifest.schema_version == 13
+    assert manifest.schema_version == MigrationRunner(source).latest_version
     assert restored_path.stat().st_mode & 0o777 == 0o600
     assert DatabaseBackup.manifest_path(backup_path).stat().st_mode & 0o777 == 0o600
 

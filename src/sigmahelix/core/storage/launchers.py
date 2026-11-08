@@ -8,11 +8,12 @@ import os
 import re
 import shlex
 import shutil
+import sqlite3
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Callable
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from .audit import AuditLog
@@ -91,7 +92,7 @@ class LaunchHandle:
     process: subprocess.Popen[bytes]
 
 
-def _profile_from_row(row) -> LauncherProfile:
+def _profile_from_row(row: sqlite3.Row) -> LauncherProfile:
     return LauncherProfile(
         UUID(row["id"]),
         row["tenant_id"],
@@ -105,7 +106,7 @@ def _profile_from_row(row) -> LauncherProfile:
     )
 
 
-def _run_from_row(row) -> LauncherRun:
+def _run_from_row(row: sqlite3.Row) -> LauncherRun:
     return LauncherRun(
         UUID(row["id"]),
         UUID(row["profile_id"]),
@@ -434,7 +435,7 @@ class LauncherService:
 
     def _record_event(
         self,
-        connection,
+        connection: sqlite3.Connection,
         event_type: str,
         run_id: UUID,
         profile: LauncherProfile,

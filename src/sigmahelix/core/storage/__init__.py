@@ -1,23 +1,23 @@
 """SQLite persistence for the SigmaHelix durable core."""
 
-from .audit import AuditLog, AuditLogEntry, AuditLogError, AuditVerification
 from .alarms import AlarmAction, AlarmError, AlarmService, AlarmState
+from .audit import AuditLog, AuditLogEntry, AuditLogError, AuditVerification
 from .backup import BackupError, BackupManifest, DatabaseBackup
 from .database import Database
 from .event_bus import EventBus, EventBusError, EventDispatchError, EventEnvelope
+from .launchers import (
+    CommandPreview,
+    LauncherError,
+    LauncherProfile,
+    LauncherRun,
+    LauncherService,
+    LaunchHandle,
+)
 from .legacy_import import (
     LegacyImportConflict,
     LegacyImportError,
     LegacyImportResult,
     LegacySessionImporter,
-)
-from .launchers import (
-    CommandPreview,
-    LaunchHandle,
-    LauncherError,
-    LauncherProfile,
-    LauncherRun,
-    LauncherService,
 )
 from .migrations import (
     Migration,
@@ -26,6 +26,7 @@ from .migrations import (
     MigrationRunner,
 )
 from .notifications import Notification, NotificationError, NotificationService
+from .occurrences import OccurrenceError, OccurrenceService
 from .project_scanner import (
     ProjectArtifact,
     ProjectScan,
@@ -34,17 +35,16 @@ from .project_scanner import (
     ProjectScanner,
 )
 from .project_watch import ProjectWatch, ProjectWatchError
-from .occurrences import OccurrenceError, OccurrenceService
-from .scheduler import JobRun, MissedJobRun, ScheduledJob, Scheduler, SchedulerError
 from .repositories import (
     ApprovalRepository,
-    EvidenceRepository,
     EventRepository,
+    EvidenceRepository,
     NoteRepository,
     ProjectRepository,
     RepositoryOperationError,
     TaskRepository,
 )
+from .scheduler import JobRun, MissedJobRun, ScheduledJob, Scheduler, SchedulerError
 
 __all__ = [
     "ApprovalRepository",

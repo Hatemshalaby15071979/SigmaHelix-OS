@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=SigmaHelix
+GenericName=Personal Operating System
+Comment=Tasks, notes, projects, calendar and a local assistant
+Exec=sigmahelix
+TryExec=sigmahelix
+Icon=sigmahelix
+Terminal=false
+Categories=Office;ProjectManagement;Utility;
+Keywords=task;note;project;calendar;assistant;
+StartupNotify=true
+StartupWMClass=SigmaHelix
