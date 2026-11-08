@@ -104,6 +104,11 @@ All notable changes to SigmaHelix are recorded here. The format follows
   code, runs the tests again, and reports what changed and what still fails —
   a list of file names is never the answer to "fix this". Local and Hybrid modes
   keep the prior single-shot behaviour.
+- **Cloud-mode launches self-heal a missing runtime.** When a launch fails
+  because a Python module/runtime is not installed, Tommy (Cloud mode only)
+  installs the project's requirements into a project-local `.venv` and retries
+  the launch — instead of stopping at "install the project requirements first".
+  This only runs in Cloud mode and stays off for Local/Hybrid.
 - Tasks and notes live in the durable SQLite core. Migration v14 adds
   `pinned`, `display_id` and `recurrence` to tasks and `pinned`/`display_id` to
   notes; existing rows are numbered during the upgrade.

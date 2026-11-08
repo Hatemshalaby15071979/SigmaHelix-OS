@@ -712,6 +712,79 @@ def edit_file(
     }
 
 
+def find_requirements(project: Path) -> Path | None:
+    """The dependency manifest a project installs from, if it has one."""
+    for name in (
+        "requirements.txt",
+        "pyproject.toml",
+        "setup.py",
+        "setup.cfg",
+        "environment.yml",
+        "Pipfile",
+    ):
+        candidate = project / name
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def install_project_requirements(
+    root: Path, project: Path, timeout: int = 600
+) -> dict[str, Any]:
+    """Create a project-local venv (if missing) and install its requirements.
+
+    The agent's launch detectors prefer ``<project>/.venv/bin/python``, so once
+    the deps are in that venv a previously-failing launch will pass its preflight.
+    Confined to the project; never touches anything outside the workspace.
+    """
+    req = find_requirements(project)
+    if req is None:
+        return {"ok": False, "error": "no requirements file found in the project"}
+
+    venv_dir = project / ".venv"
+    venv_py = venv_dir / "bin" / "python"
+    steps: list[str] = []
+
+    if not venv_py.is_file():
+        created = run_command(
+            root,
+            [sys.executable, "-m", "venv", str(venv_dir)],
+            cwd=str(project),
+            timeout=300,
+        )
+        steps.append(created.summary())
+        if not created.ok:
+            return {
+                "ok": False,
+                "error": f"venv creation failed: {created.error or created.stderr[-400:]}",
+                "steps": steps,
+            }
+
+    pip = str(venv_dir / "bin" / "pip")
+    if req.name == "requirements.txt":
+        argv = [pip, "install", "-r", str(req)]
+    elif req.name in ("pyproject.toml", "setup.py", "setup.cfg"):
+        argv = [pip, "install", "."]
+    elif req.name == "Pipfile":
+        argv = [str(venv_dir / "bin" / "pipenv"), "install"]
+    else:  # environment.yml and anything else we cannot safely install
+        return {
+            "ok": False,
+            "error": f"cannot install from {req.name} automatically",
+            "steps": steps,
+        }
+
+    installed = run_command(root, argv, cwd=str(project), timeout=timeout)
+    steps.append(installed.summary())
+    if not installed.ok:
+        return {
+            "ok": False,
+            "error": installed.stderr[-600:] or installed.error or "install failed",
+            "steps": steps,
+        }
+    return {"ok": True, "venv_py": str(venv_py), "req": req.name, "steps": steps}
+
+
 def format_command_result(result: CommandResult, tail: int = 40) -> str:
     """The command's own report, trimmed to what a model can read."""
     lines = [result.summary()]

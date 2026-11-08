@@ -1623,6 +1623,12 @@ class Agent:
                 ),
             }
             if not ok:
+                # Cloud mode is the full agent: don't stop at a missing runtime
+                # — install the project's requirements and retry the launch.
+                if self._loop_enabled() and self._is_missing_runtime(message):
+                    retry = self._remediate_launch(best, project, name, message)
+                    if retry is not None:
+                        return retry
                 return f"▶ {name}: {message}"
             tail = (
                 f"\nThe {page.name} page is also in the Projects view."
@@ -1667,6 +1673,49 @@ class Agent:
             "FastAPI/Flask entry point and an index.html — none found.\n"
             f"Top-level files: {manifests}"
         )
+
+    @staticmethod
+    def _is_missing_runtime(message: str) -> bool:
+        """True when a launch failed because a Python runtime/module is absent."""
+        return (
+            "is not installed for" in message
+            and "install the project requirements" in message
+        )
+
+    def _remediate_launch(
+        self, best, project: Path, name: str, message: str
+    ) -> str | None:
+        """Install a missing runtime and retry the launch once. Returns the new
+        reply, or None when remediation is not applicable / failed to resolve."""
+        from . import coder
+        from .launchables import detect_launchables, launch
+        from .paths import projects_dir
+
+        info = coder.install_project_requirements(projects_dir(), project)
+        if not info.get("ok"):
+            detail = (info.get("error") or "install failed")[:300]
+            return (
+                f"▶ {name}: {message}\n"
+                f"I tried installing its requirements but it didn't work: {detail}"
+            )
+        # requirements now live in <project>/.venv; re-detect so the desktop/web
+        # command picks up that interpreter, then launch the same kind again.
+        items = detect_launchables(project)
+        same = next((it for it in items if it.kind == best.kind), None) or (
+            items[0] if items else None
+        )
+        if same is None:
+            return (
+                f"▶ {name}: installed requirements but found no runnable entry to "
+                "start. Open the Projects view to see the page link."
+            )
+        ok, new_message = launch(same, terminal=same.kind in ("web", "service"))
+        if not ok:
+            return (
+                f"▶ {name}: installed requirements, but the launch still failed: "
+                f"{new_message}"
+            )
+        return f"▶ {name}: installed requirements, then started {same.label}."
 
     def _handle_create_document(self, args_text, original_text):
         """Write a real PDF document into the workspace."""

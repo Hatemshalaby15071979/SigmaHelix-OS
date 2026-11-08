@@ -118,6 +118,14 @@ migration tests (`tests/core/test_migrations.py`) and extend
   disabled `code` plugin act. The loop prompt block is injected only in Cloud
   mode (`Agent.loop_block()`), so `system_prompt()` must reproduce the local
   prompt exactly when the loop is off.
+- **Launches self-heal in Cloud mode too.** `Agent._handle_launch` →
+  `Agent._remediate_launch` → `coder.install_project_requirements` creates a
+  project-local `.venv` and installs the project's requirements when a launch
+  fails for a missing runtime (`_preflight` "is not installed for … install the
+  project requirements"). It then re-detects and retries once. This is gated by
+  `_loop_enabled()` (Cloud + code plugin), so Local/Hybrid never install
+  anything. Never run it outside Cloud mode, and never let it install into a
+  project the user did not ask to launch.
 - **Everything is a plugin, and all of them are on.** `app/plugins.py` is the
   single catalogue of capabilities (`PLUGINS`) and presets (`PRESETS`). Tommy is
   one persona with every capability enabled by default — the switches are for

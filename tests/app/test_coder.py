@@ -128,6 +128,22 @@ def test_edit_file_refuses_missing_and_ambiguous_text(workspace):
     assert "appears" in ambiguous["error"]
 
 
+def test_find_requirements_prefers_requirements_txt(workspace):
+    (workspace / "demo" / "requirements.txt").write_text("pywebview\n")
+    (workspace / "demo" / "pyproject.toml").write_text("[project]\n")
+    found = coder.find_requirements(workspace / "demo")
+    assert found is not None
+    assert found.name == "requirements.txt"
+
+
+def test_install_requirements_reports_missing_manifest(workspace):
+    empty = workspace / "bare"
+    empty.mkdir()
+    info = coder.install_project_requirements(workspace, empty)
+    assert info["ok"] is False
+    assert "no requirements file" in info["error"]
+
+
 # ---------------------------------------------------------------------------
 # agent wiring
 # ---------------------------------------------------------------------------
@@ -146,6 +162,57 @@ def test_agent_dispatches_the_coding_actions(cloud_agent):
 def test_agent_reports_a_missing_project(cloud_agent):
     reply = cloud_agent.process_command("audit the teleporter project")
     assert "No project matches" in reply
+
+
+def test_launch_remediates_missing_runtime_in_cloud(workspace, monkeypatch):
+    """Cloud mode installs the missing runtime and retries the launch."""
+    from sigmahelix.app.launchables import Launchable
+
+    project = workspace / "demo"
+
+    desktop = Launchable(
+        project="demo",
+        kind="desktop",
+        label="python desktop.py",
+        path=project / "desktop.py",
+        command=("python3", "desktop.py"),
+        requires=("webview",),
+    )
+
+    calls: list[str] = []
+
+    def fake_launch(item, terminal=None):
+        calls.append("launch")
+        if len(calls) == 1:
+            return (
+                False,
+                "webview is not installed for python3 — install the project requirements first",
+            )
+        return (True, "started python desktop.py")
+
+    monkeypatch.setattr(
+        "sigmahelix.app.launchables.detect_launchables",
+        lambda p: [desktop],
+    )
+    monkeypatch.setattr("sigmahelix.app.launchables.launch", fake_launch)
+    monkeypatch.setattr(
+        "sigmahelix.app.coder.install_project_requirements",
+        lambda root, proj, timeout=600: {
+            "ok": True,
+            "venv_py": str(project / ".venv" / "bin" / "python"),
+            "req": "requirements.txt",
+            "steps": [],
+        },
+    )
+
+    agent = agent_module.Agent()
+    agent.model_kind = "cloud"
+    agent.llm_available = False  # launch is deterministic; no model needed
+
+    reply = agent.process_command("run the demo app")
+    assert "installed requirements" in reply
+    assert "started" in reply
+    assert calls == ["launch", "launch"]  # failed once, retried after install
 
 
 # ---------------------------------------------------------------------------
