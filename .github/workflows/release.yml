@@ -1,0 +1,46 @@
+name: Release
+
+# Publish a GitHub Release with the built wheel and sdist whenever a v* tag is
+# pushed. Also runnable by hand (workflow_dispatch) against an existing tag so
+# the pipeline can be exercised without cutting a new version.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)release, e.g. v1.0.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build wheel and sdist
+        run: |
+          python -m pip install --upgrade pip build
+          python -m build
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${{ inputs.tag || github.ref_name }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            # Idempotent: re-running updates the assets instead of failing.
+            gh release upload "$tag" dist/* --clobber
+          else
+            gh release create "$tag" --title "SigmaHelix $tag" --generate-notes dist/*
+          fi
