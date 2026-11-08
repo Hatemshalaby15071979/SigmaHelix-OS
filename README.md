@@ -62,9 +62,9 @@ For development, install into the checkout instead:
 
 | Path | Contents |
 | --- | --- |
-| `~/.local/share/sigmahelix/sigmahelix.db` | The database (mode 0600, WAL, `synchronous=FULL`) |
+| `~/.local/share/sigmahelix/sigmahelix.db` | The database (mode 0600, WAL, `synchronous=NORMAL`) |
 | OS keyring (`sigmahelix` service) | Cloud provider API keys, never a file |
-| `~/.config/sigmahelix/config.yaml` | Optional settings: `database_path`, `log_level`, `model_mode` (`local`/`cloud`/`hybrid`), `cloud_provider`, `cloud_model`, `plugins_enabled` |
+| `~/.config/sigmahelix/config.yaml` | Optional settings: `database_path`, `log_level`, `model_mode` (`local`/`cloud`/`hybrid`), `cloud_provider`, `cloud_model`, `cloud_max_tokens`, `cloud_replay_history`, `plugins_enabled` |
 | `~/.local/state/sigmahelix/logs/` | Rotating JSON logs with secret redaction |
 
 Override the data directory with `SIGMAHELIX_DATA_DIR` (this also moves the
@@ -88,7 +88,7 @@ sigmahelix ledger verify       verify the audit chain and every turn proof
 sigmahelix ledger report       metrics + recommendations (--analyze, --period 7d)
 sigmahelix ledger show ID      one turn with its reasoning steps
 sigmahelix ledger feedback ID good|pushback
-sigmahelix ledger decide ID approve|reject --note "..."
+sigmahelix ledger decide ID approve|reject|reopen --note "..."
 sigmahelix db upgrade          apply pending migrations
 sigmahelix db info             show the schema version
 ```

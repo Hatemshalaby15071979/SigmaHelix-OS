@@ -95,6 +95,73 @@ def test_index_carries_the_session_token(server):
     assert "__SIGMAHELIX_TOKEN__" not in body
 
 
+def test_metacognition_response_drops_turn_ids_from_the_wire(server):
+    base, token = server
+    status, body = call(base, "/api/metacognition", token=token)
+    assert status == 200
+    payload = json.loads(body)
+    assert "turn_ids" not in payload["report"]
+    status, body = call(
+        base, "/api/metacognition/analyze", token=token, payload={"period": "7d"}
+    )
+    assert status == 200
+    payload = json.loads(body)
+    assert "turn_ids" not in payload["report"]
+    assert isinstance(payload["recommendations"], list)
+
+
+def test_unknown_turn_route_returns_404(server):
+    """A real turn is served; an unknown id is a 404, not a 200 with empty data."""
+    base, token = server
+    # Create a turn through the public chat endpoint.
+    call(base, "/api/chat", token, {"text": "create task something real"})
+    status, body = call(base, "/api/metacognition?period=7d", token=token)
+    assert status == 200
+    turns = json.loads(body)["turns"]
+    assert turns
+    real_id = turns[-1]["id"]
+
+    status, body = call(base, f"/api/metacognition/turns/{real_id}", token=token)
+    assert status == 200
+    assert json.loads(body)["id"] == real_id
+
+    with pytest.raises(urllib.error.HTTPError) as exc:
+        call(base, "/api/metacognition/turns/nope", token=token)
+    assert exc.value.code == 404
+
+
+def test_report_rejects_invalid_period(server):
+    """A malformed period is a 400, a valid one is 200 — not silently 200."""
+    base, token = server
+    with pytest.raises(urllib.error.HTTPError) as exc:
+        call(base, "/api/metacognition?period=7x", token=token)
+    assert exc.value.code == 400
+
+    status, _ = call(base, "/api/metacognition?period=7d", token=token)
+    assert status == 200
+
+
+def test_feedback_on_unknown_turn_is_400(server):
+    """Feedback names a turn that must exist; a bogus id is a 400."""
+    base, token = server
+    # A valid turn first, so the 400 below is about the id, not the payload shape.
+    call(base, "/api/chat", token, {"text": "create task feedback target"})
+    status, body = call(base, "/api/metacognition?period=7d", token=token)
+    real_id = json.loads(body)["turns"][-1]["id"]
+    status, _ = call(
+        base, "/api/metacognition/feedback", token,
+        {"turn_id": real_id, "verdict": "good"},
+    )
+    assert status == 200
+
+    with pytest.raises(urllib.error.HTTPError) as exc:
+        call(
+            base, "/api/metacognition/feedback", token,
+            {"turn_id": "bogus", "verdict": "good"},
+        )
+    assert exc.value.code == 400
+
+
 def test_state_needs_the_token(server):
     base, _ = server
     with pytest.raises(urllib.error.HTTPError) as exc:
@@ -426,4 +493,85 @@ def test_metacognition_rejects_bad_input(server):
     assert exc.value.code == 400
     with pytest.raises(urllib.error.HTTPError) as exc:
         call(base, "/api/metacognition/decide", token, {"rec_id": "", "decision": "x"})
+    assert exc.value.code == 400
+
+
+def test_metacognition_reports_unknown_turns_as_not_found(server):
+    base, token = server
+    with pytest.raises(urllib.error.HTTPError) as exc:
+        call(base, "/api/metacognition/turns/no-such-turn", token)
+    assert exc.value.code == 404
+
+
+def test_metacognition_rejects_a_bad_period(server):
+    base, token = server
+    with pytest.raises(urllib.error.HTTPError) as exc:
+        call(base, "/api/metacognition?period=1000000000d", token)
+    assert exc.value.code == 400
+    with pytest.raises(urllib.error.HTTPError) as exc:
+        call(base, "/api/metacognition?period=nonsense", token)
+    assert exc.value.code == 400
+
+
+def test_a_rejected_recommendation_can_be_reopened(server):
+    base, token = server
+    call(base, "/api/chat", token, {"text": "create task walk the dog"})
+    _, body = call(base, "/api/metacognition", token)
+    turn = json.loads(body)["turns"][0]
+    # A pushback with no tool call is what makes a rule fire.
+    call(
+        base,
+        "/api/metacognition/feedback",
+        token,
+        {"turn_id": turn["id"], "verdict": "pushback"},
+    )
+    _, body = call(base, "/api/metacognition/analyze", token, {"period": "7d"})
+    rec = json.loads(body)["recommendations"][0]
+
+    status, body = call(
+        base,
+        "/api/metacognition/decide",
+        token,
+        {"rec_id": rec["id"], "decision": "rejected"},
+    )
+    assert json.loads(body)["status"] == "rejected"
+
+    # The rejection sticks: analyze does not resurrect it.
+    _, body = call(base, "/api/metacognition/analyze", token, {"period": "7d"})
+    recs = json.loads(body)["recommendations"]
+    assert next(r for r in recs if r["id"] == rec["id"])["status"] == "rejected"
+
+    # Only the founder may put it back on the table.
+    status, body = call(
+        base,
+        "/api/metacognition/decide",
+        token,
+        {"rec_id": rec["id"], "decision": "reopen"},
+    )
+    assert json.loads(body)["status"] == "proposed"
+
+
+def test_an_illegal_decision_is_refused(server):
+    base, token = server
+    call(base, "/api/chat", token, {"text": "create task walk the dog"})
+    _, body = call(base, "/api/metacognition", token)
+    turn = json.loads(body)["turns"][0]
+    call(
+        base,
+        "/api/metacognition/feedback",
+        token,
+        {"turn_id": turn["id"], "verdict": "pushback"},
+    )
+    _, body = call(base, "/api/metacognition/analyze", token, {"period": "7d"})
+    rec = json.loads(body)["recommendations"][0]
+    call(
+        base, "/api/metacognition/decide", token, {"rec_id": rec["id"], "decision": "approved"}
+    )
+    with pytest.raises(urllib.error.HTTPError) as exc:
+        call(
+            base,
+            "/api/metacognition/decide",
+            token,
+            {"rec_id": rec["id"], "decision": "approved"},
+        )
     assert exc.value.code == 400

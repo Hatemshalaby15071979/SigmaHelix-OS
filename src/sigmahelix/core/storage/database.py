@@ -33,7 +33,12 @@ class Database:
             connection.row_factory = sqlite3.Row
             connection.execute("PRAGMA foreign_keys = ON")
             connection.execute("PRAGMA busy_timeout = 5000")
-            connection.execute("PRAGMA synchronous = FULL")
+            # WAL + NORMAL is the standard safe pairing: a crash or a power cut
+            # can lose the last commits, but the database is never corrupt and
+            # never half-written. FULL costs an fsync per commit — measured at
+            # ~88 ms on this machine's disk, which was the dominant cost of
+            # every agent turn.
+            connection.execute("PRAGMA synchronous = NORMAL")
             journal_mode = connection.execute("PRAGMA journal_mode").fetchone()[0]
             if str(journal_mode).lower() != "wal":
                 connection.execute("PRAGMA journal_mode = WAL")

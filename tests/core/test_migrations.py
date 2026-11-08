@@ -225,7 +225,7 @@ def test_metacognition_ledger_migration_creates_and_drops_its_tables(tmp_path):
 
     database = Database(tmp_path / "ledger.db")
     runner = MigrationRunner(database)
-    assert runner.upgrade() == 16
+    assert runner.upgrade() == 17
 
     objects = _application_objects(database)
     for table in (

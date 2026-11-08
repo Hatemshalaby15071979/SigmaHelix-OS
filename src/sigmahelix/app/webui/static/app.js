@@ -732,6 +732,21 @@
           row.appendChild(button);
         }
         card.appendChild(row);
+      } else if (rec.status === "rejected") {
+        // A rejection sticks. Only the founder can put it back on the table.
+        const row = el("div", "rec-actions");
+        const button = el("button", "ghost", "Reopen");
+        button.addEventListener("click", async () => {
+          try {
+            await post("/api/metacognition/decide", { rec_id: rec.id, decision: "reopen" });
+            setStatus(`${rec.title} reopened`);
+            loadMind(false);
+          } catch (e) {
+            setStatus(e.message, true);
+          }
+        });
+        row.appendChild(button);
+        card.appendChild(row);
       }
       recs.appendChild(card);
     }

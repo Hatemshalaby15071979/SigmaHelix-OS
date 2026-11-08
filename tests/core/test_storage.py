@@ -45,7 +45,10 @@ def test_database_configures_wal_integrity_pragmas_and_private_file(database):
         assert connection.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
         assert connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
         assert connection.execute("PRAGMA busy_timeout").fetchone()[0] == 5000
-        assert connection.execute("PRAGMA synchronous").fetchone()[0] == 2
+        # NORMAL (1) in WAL: a crash can lose the last commits, but the
+        # database is never corrupt and never half-written. FULL (2) cost an
+        # fsync per commit — ~88 ms on this disk, eight commits per agent turn.
+        assert connection.execute("PRAGMA synchronous").fetchone()[0] == 1
         assert (
             connection.execute("PRAGMA user_version").fetchone()[0]
             == MigrationRunner(database).latest_version

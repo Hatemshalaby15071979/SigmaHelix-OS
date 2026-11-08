@@ -794,6 +794,24 @@ DROP TABLE IF EXISTS agent_turns;
             "agent_recommendations",
         ),
     ),
+    # Index-only migration: adds the two covering indexes the report/recommend
+    # queries were missing. Indexes drop safely even with data, so rollback
+    # needs no empty-table guard.
+    Migration(
+        version=17,
+        name="metacognition_ledger_indexes_v17",
+        up_sql="""
+CREATE INDEX idx_agent_feedback_tenant_created
+    ON agent_feedback(tenant_id, created_at);
+CREATE INDEX idx_agent_recommendations_tenant_status_created
+    ON agent_recommendations(tenant_id, status, created_at);
+""",
+        down_sql="""
+DROP INDEX IF EXISTS idx_agent_recommendations_tenant_status_created;
+DROP INDEX IF EXISTS idx_agent_feedback_tenant_created;
+""",
+        rollback_requires_empty=(),
+    ),
 )
 
 

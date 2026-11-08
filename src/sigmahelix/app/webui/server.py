@@ -26,6 +26,7 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
 from ...core.storage.repositories import RepositoryOperationError
+from ..metacognition import TurnNotFound
 from ..service import AppService
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -116,11 +117,16 @@ class AppState:
         }
 
     def analyze(self, period: str = "7d") -> dict[str, Any]:
-        """Recompute recommendations from the ledger (idempotent)."""
+        """Recompute recommendations from the ledger (idempotent).
+
+        The report is built once and handed to ``recommend`` so the same period
+        is never aggregated twice in a single request.
+        """
         ledger = self.agent.ledger
+        report = ledger.report(period)
         return {
-            "report": ledger.report(period),
-            "recommendations": ledger.recommend(period),
+            "report": report,
+            "recommendations": ledger.recommend(period, metrics=report),
             "turns": ledger.turns(limit=20),
         }
 
@@ -132,8 +138,8 @@ class AppState:
         return {"ok": True, "turn_id": turn_id, "verdict": verdict}
 
     def decide(self, rec_id: str, decision: str, note: str = "") -> dict[str, Any]:
-        if decision not in ("approved", "rejected"):
-            raise ValueError("decision must be 'approved' or 'rejected'")
+        if decision not in ("approved", "rejected", "proposed", "reopen"):
+            raise ValueError("decision must be 'approved', 'rejected' or 'reopen'")
         return self.agent.ledger.decide(rec_id, decision, note=note)
 
     # ---- write -----------------------------------------------------------
@@ -323,6 +329,16 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- routes ----------------------------------------------------------
     def do_GET(self) -> None:  # noqa: N802
+        try:
+            return self._dispatch_get()
+        except TurnNotFound as exc:
+            return self._error(HTTPStatus.NOT_FOUND, str(exc))
+        except ValueError as exc:
+            return self._error(HTTPStatus.BAD_REQUEST, str(exc))
+        except Exception:  # noqa: BLE001 - report, never kill the server
+            return self._error(HTTPStatus.INTERNAL_SERVER_ERROR, "internal error")
+
+    def _dispatch_get(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path
 
@@ -352,7 +368,7 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/api/metacognition/turns/"):
             if not self._authorised():
                 return self._error(HTTPStatus.FORBIDDEN, "bad token")
-            turn_id = path.removeprefix("/api/metacognition/turns/")
+            turn_id = unquote(path.removeprefix("/api/metacognition/turns/")).strip()
             if not turn_id:
                 return self._error(HTTPStatus.BAD_REQUEST, "missing turn id")
             return self._json(self.state.metacognition_turn(turn_id))
@@ -405,9 +421,15 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/metacognition/decide":
             rec_id = str(data.get("rec_id") or "").strip()
             decision = str(data.get("decision") or "").strip()
-            if not rec_id or decision not in ("approved", "rejected"):
+            if not rec_id or decision not in (
+                "approved",
+                "rejected",
+                "proposed",
+                "reopen",
+            ):
                 return self._error(
-                    HTTPStatus.BAD_REQUEST, "rec_id and decision required"
+                    HTTPStatus.BAD_REQUEST,
+                    "rec_id and decision (approved|rejected|reopen) required",
                 )
             return self._json(
                 self.state.decide(rec_id, decision, str(data.get("note") or ""))

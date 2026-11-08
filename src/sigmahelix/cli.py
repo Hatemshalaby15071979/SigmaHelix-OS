@@ -348,7 +348,15 @@ def command_ledger(args: argparse.Namespace) -> int:
 
     ledger = Ledger(_open_database())
     action = args.ledger_command
+    try:
+        return _run_ledger_command(ledger, args, action)
+    except ValueError as exc:
+        # A typo must not print a traceback.
+        print(f"ledger: {exc}", file=sys.stderr)
+        return EXIT_USAGE
 
+
+def _run_ledger_command(ledger, args, action: str) -> int:
     if action == "verify":
         result = ledger.verify()
         if result["valid"]:
@@ -357,13 +365,25 @@ def command_ledger(args: argparse.Namespace) -> int:
                 f"{result['turns_checked']} turn proof(s), "
                 f"{result['unclosed']} unclosed"
             )
+            if not result["complete"]:
+                print(
+                    "note: the ledger is not complete — "
+                    f"{result['unclosed']} unclosed turn(s), "
+                    f"{len(result['orphans'])} orphan anchor(s), "
+                    f"{len(result['duplicates'])} duplicate anchor(s)"
+                )
+            if result["legacy"]:
+                print(
+                    f"note: {result['legacy']} turn(s) were recorded before the "
+                    "step digest existed; their steps are not covered by the proof"
+                )
             return EXIT_OK
         if not result["chain_valid"]:
             print("ledger BROKEN: the audit chain does not verify", file=sys.stderr)
         else:
             print(
-                f"ledger BROKEN: turn proof mismatch at "
-                f"{result['mismatch']['turn_id']}",
+                f"ledger BROKEN: {result['mismatch'].get('reason', 'proof mismatch')} "
+                f"at {result['mismatch']['turn_id']}",
                 file=sys.stderr,
             )
         return EXIT_FAILURE
@@ -371,7 +391,9 @@ def command_ledger(args: argparse.Namespace) -> int:
     if action == "report":
         metrics = ledger.report(args.period)
         recs = (
-            ledger.recommend(args.period) if args.analyze else ledger.recommendations()
+            ledger.recommend(args.period, metrics=metrics)
+            if args.analyze
+            else ledger.recommendations()
         )
         if args.json:
             print(json.dumps({"report": metrics, "recommendations": recs}, indent=2))
@@ -435,9 +457,15 @@ def command_ledger(args: argparse.Namespace) -> int:
         return EXIT_OK
 
     if action == "decide":
-        decision = "approved" if args.decision == "approve" else "rejected"
-        ledger.decide(args.rec_id, decision, note=args.note)
-        print(f"{args.rec_id} {decision}")
+        # approve | reject | reopen — the ledger owns the legal transitions.
+        result = ledger.decide(args.rec_id, args.decision, note=args.note)
+        print(f"{args.rec_id} {result['status']}")
+        return EXIT_OK
+
+    if action == "apply":
+        # apply an approved recommendation — only whitelisted, reversible kinds.
+        result = ledger.apply(args.rec_id, note=args.note)
+        print(f"{args.rec_id} {result['status']} — {result['effect']}")
         return EXIT_OK
 
     return EXIT_USAGE
@@ -617,11 +645,18 @@ def build_parser() -> argparse.ArgumentParser:
     ledger_feedback.add_argument("verdict", choices=("good", "pushback"))
     ledger_feedback.add_argument("--reason", default="")
     ledger_decide = ledger_sub.add_parser(
-        "decide", help="approve or reject a recommendation"
+        "decide", help="approve, reject or reopen a recommendation"
     )
     ledger_decide.add_argument("rec_id")
-    ledger_decide.add_argument("decision", choices=("approve", "reject"))
+    ledger_decide.add_argument(
+        "decision", choices=("approve", "reject", "reopen")
+    )
     ledger_decide.add_argument("--note", default="")
+    ledger_apply = ledger_sub.add_parser(
+        "apply", help="apply an approved, whitelisted recommendation"
+    )
+    ledger_apply.add_argument("rec_id")
+    ledger_apply.add_argument("--note", default="")
 
     db = subparsers.add_parser("db", help="database maintenance")
     db_sub = db.add_subparsers(dest="db_command", required=True)

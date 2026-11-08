@@ -55,3 +55,37 @@ claim about its own performance.
   truncation, tool failures, pushback and repeated intents are falling. It does
   **not** mean the model trains on the founder's data — no weights change, and any
   style corpus is built only from explicitly approved turns.
+
+## Amendment — 2026-11-08: the proof covers the steps, and the founder's word sticks
+
+The original version of this ADR made two claims that the implementation did not
+actually honour. A review of the two landed commits found it, and both claims are
+now true:
+
+1. *"the audit chain makes silent edits detectable"* was **false** for the two
+   richest tables. The proof hashed the turn row only, so editing a step's
+   arguments or deleting a step left `ledger verify` reporting `valid: true`, and
+   deleting a whole turn removed it from the check entirely — the verifier
+   iterated the table it was supposed to be checking. The proof now includes the
+   canonical digest of the turn's ordered steps, verification is driven from the
+   `agent.turn.completed` anchors (an anchor without a turn is an orphan, a turn
+   with two anchors is a duplicate), and the steps, the turn row, the proof and
+   the anchor are written in **one transaction**. A closed turn cannot be closed
+   twice.
+2. *"the founder decides"* was **decorative**. The status guard accepted every
+   status, and the recommendation table kept one *open* row per rule — so a
+   rejected recommendation came back as a fresh proposal on the next analysis.
+   There is now one row per (kind, title) for ever: a rejection sticks until the
+   founder reopens it, and decisions follow an explicit transition table that is
+   audited with the state each decision came from.
+
+Two consequences of the same review are also now part of the decision:
+
+- **What is stored is redacted.** The founder's text, the reply and every step
+  argument pass through `redact_text` before they are written, so a pasted
+  credential is never persisted in plaintext.
+- **The ledger does not leak to the cloud.** Past turns are replayed into the
+  prompt by the local model only. Replaying them to a cloud provider is
+  opt-in (`cloud_replay_history`), because persistence must not become standing
+  exfiltration of the founder's history.
+

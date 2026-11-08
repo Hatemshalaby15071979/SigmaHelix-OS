@@ -8,6 +8,102 @@ All notable changes to SigmaHelix are recorded here. The format follows
 
 ### Added
 
+- **`cloud_replay_history` setting** (default `false`). Past turns are replayed
+  into the prompt by the local model only; sending them to a cloud provider
+  needs the founder's explicit opt-in.
+- **Metacognition ledger (migration v16).** Every turn is written to
+
+### Changed
+
+- **The turn proof now covers the reasoning trail.** The canonical digest of a
+  turn's ordered steps is part of its proof, so editing, deleting or inserting a
+  step is detected by `sigmahelix ledger verify` — the reasoning trail is
+  provable like the reply is.
+- **Verification is driven by the audit chain.** Every `agent.turn.completed`
+  anchor must have a live closed turn, every closed turn must have exactly one
+  anchor, and a turn that was deleted from the table is reported as an orphan.
+  `verify` now reports `complete`, `orphans` and `duplicates` next to `valid`.
+- **A turn is written in one transaction.** The steps, the turn row, its proof
+  and the audit anchor are committed together, and the anchor can no longer be
+  left behind a failed write. A closed turn cannot be closed a second time.
+- **Recommendations remember a rejection.** One row per (kind, title): a
+  recommendation the founder rejected is not re-proposed by the next analysis.
+  Decisions follow an explicit transition table — `proposed → approved |
+  rejected`, `approved → rejected`, `rejected → approved | proposed` (reopen) —
+  and every decision is audited with the state it came from. The Mind tab shows
+  a **Reopen** button for rejected recommendations; `sigmahelix ledger decide`
+  accepts `approve`, `reject` and `reopen`.
+- **SQLite runs with `synchronous = NORMAL`** (WAL). The old `FULL` setting cost
+  an fsync per commit — ~88 ms on this machine's disk, and eight commits per
+  agent turn.
+- **The Mind report no longer issues one query per turn.** Step metrics come from
+  a single aggregate `GROUP BY` over the steps table joined to the period's turns,
+  so `report` stays fast as the ledger grows and `analyze` builds the report once
+  and hands it to `recommend` instead of recomputing it. `turn_ids` are no longer
+  sent over the wire (the Mind tab never read them) — only the recommendations
+  that cite them keep the id list.
+- **`applied` is now a real, reachable state.** `Ledger.apply()` runs only on
+  `approved` recommendations and only for whitelisted, reversible kinds
+  (`config` writes the setting, `skill` writes a reversible user skill file,
+  plugin toggles update the enabled set); `prompt`/`tool`/`new_plugin` are refused
+  with "not auto-applied" so the founder routes them to the coding agent. Every
+  application is audited with what it did, and an applied recommendation can no
+  longer be decided. `sigmahelix ledger apply <rec-id>` exposes it. The config
+  recommendation now carries the exact `setting`/`value` it will write.
+- **Config secret detection no longer false-positives on `cloud_max_tokens`.** The
+  secret-key guard matches a token/key/password only as a whole segment, so
+  `cloud_max_tokens` is a valid setting while `api_token`/`auth_token`/`api_key`
+  still raise.
+- **Outcomes are decided at the route, not sniffed from the reply.** `process_command`
+  now assigns an explicit outcome (`answered` / `acted` / `blocked` / `refused` /
+  `failed`) at each return point from the route's own status contract; the old
+  emoji-prefix sniffing over the reply string is gone. Deterministic action routes
+  (`tool`, `task`) that succeed are marked `acted`.
+- **Deterministic routes now record a step.** `tool` and `task` routes never ran the
+  model loop, so they left the steps table empty and quietly distorted the tool-call
+  metrics and the "pushback without a tool" rule. Each now records one honest
+  `tool_call` step, so those metrics reflect reality; a blocked/disabled route is
+  recorded as `blocked` and gets no fabricated success step.
+- **`pushback_rate` can no longer exceed 1.** It was feedback rows (filtered by
+  `created_at`) divided by turns (filtered by `started_at`) — a late verdict on an
+  old turn, or two verdicts on one turn, pushed it past 1. It is now the count of
+  distinct period turns (joined on `started_at`) carrying a pushback verdict, so it
+  stays within [0, 1].
+- **The report no longer silently truncates busy periods.** `report` fetched period
+  turns with a 100 000-row `LIMIT` ordered ascending, which dropped the newest turns
+  past the cap. `turns(since=…, limit=None)` returns every period turn and `report`
+  uses it.
+- **Metacognition ledger (migration v17).** Adds the two covering indexes the
+  report/recommend queries were missing — `idx_agent_feedback_tenant_created` on
+  `agent_feedback(tenant_id, created_at)` and
+  `idx_agent_recommendations_tenant_status_created` on
+  `agent_recommendations(tenant_id, status, created_at)` — so pushback and
+  recommendation lookups scan by index instead of the whole table.
+- **`evidence_json` is always a JSON array.** An unclosed turn now stores `[]`
+  instead of `{}`, so callers never special-case an unclosed turn's evidence
+  shape; the report and the `verify` proof both cover it.
+- **Ledger tests hardened (regressions stop hiding).** The four tautological
+  metacognition assertions were rewritten to check real behaviour — a decision's
+  `from`/`to` state in the audit chain, the exact repeated-intent key the report
+  groups under, that a ledger failure leaves no half-written turn behind, and that
+  assistant replies (not just user prompts) survive a restart — and ten regression
+  tests were added: double-decide refusal, unknown-turn 404, invalid-period 400,
+  mid-turn ledger failure, evidence shape, persisted steps, feedback-on-unknown 400,
+  concurrent same-session turns, recovered-intent vs skill rule, and
+  `sigmahelix ledger verify` / `report --json` through the CLI.
+
+### Fixed
+
+- **Credentials are no longer written to the ledger in plaintext.** The user's
+  text, the reply and every step argument and summary pass through the
+  existing `redact_text` before they are stored, and provider keys without a
+  label (`sk-…`, `gsk_…`) are now redacted too.
+- **A bad request could kill the web connection.** Every GET route now has the
+  same exception boundary the POST routes have: an unknown turn id is a 404, a
+  bad period is a 400, and an internal error is a plain 500 that does not echo
+  the exception. Periods are bounded (3650 days / 8760 hours / 520 weeks).
+- **`sigmahelix ledger` no longer prints a traceback** for a bad turn id or a
+  bad period; it explains the problem and exits with the usage code.
 - **Metacognition ledger (migration v16).** Every turn is written to
   `agent_turns` with its steps in `agent_steps`, and each closed turn's content
   hash is anchored in the existing hash-chained `audit_log` — so a turn is

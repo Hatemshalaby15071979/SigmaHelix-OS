@@ -294,10 +294,15 @@ class Agent:
             self.cloud_provider = saved.cloud_provider
             self.cloud_model = saved.cloud_model
             self.cloud_max_tokens = saved.cloud_max_tokens
+            self.cloud_replay_history = saved.cloud_replay_history
         except Exception:  # noqa: BLE001 - fall back to in-memory defaults
             pass
         if not getattr(self, "cloud_max_tokens", None):
             self.cloud_max_tokens = 4096
+        if not getattr(self, "cloud_replay_history", None):
+            # Off unless the founder turns it on: past turns are not sent to a
+            # cloud provider without consent.
+            self.cloud_replay_history = False
         self.injected_skills = {}  # Store user-injected capability prompts
         # Operating instructions that follow every model call, local or cloud.
         self.skills = SkillLibrary()
@@ -400,7 +405,7 @@ class Agent:
     def _build_messages(self, user_text):
         messages = [{"role": "system", "content": self.system_prompt()}]
         history = self.history
-        if not history:
+        if not history and self._may_replay_history():
             # After a restart the in-memory list is empty; the ledger remembers.
             try:
                 history = self.ledger.recent_conversation(limit=12)
@@ -410,6 +415,17 @@ class Agent:
             messages.append({"role": role, "content": content})
         messages.append({"role": "user", "content": user_text})
         return messages
+
+    def _may_replay_history(self) -> bool:
+        """Whether past turns may be replayed into the model prompt.
+
+        Replaying the ledger into a cloud provider sends earlier turns to a
+        third party without being asked. Only the local model may do that;
+        the cloud needs the founder's explicit opt-in.
+        """
+        if self.model_kind != "cloud":
+            return True
+        return self.cloud_replay_history
 
     def reload_skills(self):
         """Re-read the skill folders and rebuild the prompt on the next turn."""
@@ -438,12 +454,14 @@ class Agent:
         route = "keyword"
         reply = ""
         error: str | None = None
+        outcome = "answered"
         try:
             # Slash-styled direct commands bypass the LLM for speed/precision
             direct = self._direct_route(text)
             if direct is not None:
                 route = "direct"
                 reply = direct
+                outcome = self._outcome_from_reply(reply, error, action=False)
                 return reply
 
             # Question-driven task commands are deterministic: they must never
@@ -452,6 +470,7 @@ class Agent:
             if task_route is not None:
                 route = "task"
                 reply = task_route
+                outcome = self._outcome_from_reply(reply, error, action=True)
                 return reply
 
             # Concrete tool commands (web, project assessment, documents) are
@@ -460,6 +479,7 @@ class Agent:
             if tool_route is not None:
                 route = "tool"
                 reply = tool_route
+                outcome = self._outcome_from_reply(reply, error, action=True)
                 return reply
 
             if self.llm_available:
@@ -471,21 +491,25 @@ class Agent:
                         route = "tool"
                         if not self.plugins.is_enabled("projects"):
                             reply = self.plugins.off_message("projects")
+                            outcome = self._outcome_from_reply(reply, error, action=True)
                             return reply
                         reply = self._handle_create_project("", raw)
+                        outcome = self._outcome_from_reply(reply, error, action=True)
                         return reply
                     route = "loop" if self._loop_enabled() else "llm"
                     reply = result
+                    outcome = self._outcome_from_reply(reply, error, action=False)
                     return result
 
             # LLM unavailable/failed -> deterministic router
             reply = self._keyword_route(raw) if direct is None else direct
+            outcome = self._outcome_from_reply(reply, error, action=False)
             return reply
         except Exception as exc:
             error = f"{type(exc).__name__}: {exc}"
             raise
         finally:
-            self._close_turn(turn_id, started, route, reply, error)
+            self._close_turn(turn_id, started, route, reply, error, outcome)
 
     # ---- metacognition: record every turn -------------------------------
     def _open_turn(self, user_text: str):
@@ -500,28 +524,38 @@ class Agent:
         except Exception:  # noqa: BLE001 - ledger is optional, chat is not
             return None, None
 
-    def _close_turn(self, turn_id, started, route, reply, error) -> None:
-        """Write steps + outcome + cost; anchor the proof in the audit chain."""
+    def _close_turn(self, turn_id, started, route, reply, error, outcome) -> None:
+        """Write steps + outcome + cost + proof in one transaction.
+
+        The steps, the turn row and the audit anchor are written together, so a
+        turn costs one commit and can never be recorded without its proof.
+        """
         if not turn_id:
             return
         try:
             trace = self.last_trace or {}
-            steps = trace.get("steps") or []
-            for step in steps:
-                self.ledger.add_step(
-                    turn_id,
-                    "tool_call",
-                    action=str(step.get("action") or ""),
-                    plan=str(step.get("plan") or ""),
-                    args=str(step.get("args") or ""),
-                    summary=str(step.get("summary") or ""),
-                    ok=bool(step.get("ok")),
-                    duration_ms=int(step.get("duration_ms") or 0),
-                )
+            steps = list(trace.get("steps") or [])
+            # Deterministic action routes (tool, task) never run the model loop,
+            # so they record no steps of their own. Without a step they distort
+            # the tool-call metrics and the "pushback without a tool" rule, so
+            # record one honest step reflecting that an action happened.
+            if (
+                not steps
+                and not error
+                and outcome == "acted"
+                and route in ("tool", "task")
+            ):
+                steps = [
+                    {
+                        "action": route,
+                        "ok": True,
+                        "summary": f"deterministic {route} route",
+                    }
+                ]
             self.ledger.close_turn(
                 turn_id,
                 reply=str(reply or ""),
-                outcome=self._outcome_for(reply, steps, error),
+                outcome=outcome,
                 route=route,
                 error=error,
                 plan=" | ".join(trace.get("plans") or []),
@@ -537,22 +571,31 @@ class Agent:
                 ),
                 truncated=bool(trace.get("truncated")),
                 evidence=list(trace.get("evidence") or []),
+                steps=steps,
             )
         except Exception:  # noqa: BLE001 - the ledger must never break a reply
             pass
 
     @staticmethod
-    def _outcome_for(reply, steps, error) -> str:
+    def _outcome_from_reply(reply, error, action: bool) -> str:
+        """Decide the ledger outcome from the route's own reply contract.
+
+        Deterministic routes and the model loop both emit a status prefix
+        (``❌`` refused, ``⚠️`` blocked) as a deliberate signal, not free-form
+        prose to be sniffed. ``action`` marks routes that performed a
+        side-effecting action, so a plain reply from one counts as 'acted'
+        rather than 'answered'.
+        """
         if error:
             return "failed"
         text = str(reply or "")
         if text.startswith("❌"):
-            return "refused"
+            # A tool that failed is 'blocked'; only a model's own refusal is
+            # 'refused'.
+            return "blocked" if action else "refused"
         if text.startswith("⚠️"):
             return "blocked"
-        if any(step.get("ok") for step in steps):
-            return "acted"
-        return "answered"
+        return "acted" if action else "answered"
 
     def say_reply(self, text):
         """Speak a reply through TTS — ONLY called on explicit user action

@@ -83,7 +83,10 @@ SigmaHelix/
   entry. UI code never touches `repositories` directly.
 - **The agent ledger is append-only in practice** (migration v16:
   `agent_turns`, `agent_steps`, `agent_feedback`, `agent_recommendations`).
-  Each closed turn's content hash is anchored in `audit_log`; reports and
+  Each closed turn's content hash — which covers the turn *and* the digest of
+  its steps — is anchored in `audit_log` in the same transaction that writes
+  the turn. `ledger verify` is driven by those anchors, so an edited step, a
+  deleted turn and a duplicate anchor are all failures. Reports and
   recommendations are computed by SQL, never by a model. Inspect with
   `sigmahelix ledger verify|report|show|feedback|decide`.
 - **Secrets live in the OS keyring**, never in a file this repo writes.

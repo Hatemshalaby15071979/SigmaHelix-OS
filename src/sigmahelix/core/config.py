@@ -10,8 +10,14 @@ from pathlib import Path
 
 import yaml
 
+# Secret keys are matched as whole segments: a token/password/key is only treated
+# as secret when it is not part of a longer alphanumeric word. This keeps
+# `cloud_max_tokens` valid while still rejecting `api_token`, `auth_token`,
+# `api_key`, `private_key`, etc.
 _SECRET_NAME = re.compile(
-    r"secret|token|password|credential|private.?key|api.?key", re.I
+    r"(?<![a-z0-9])(secret|token|password|passwd|credential|private[ _-]?key|"
+    r"api[ _-]?key|access[ _-]?key|auth[ _-]?token)(?![a-z0-9])",
+    re.I,
 )
 _ALLOWED_YAML_KEYS = {
     "database_path",
@@ -21,6 +27,7 @@ _ALLOWED_YAML_KEYS = {
     "cloud_model",
     "plugins_enabled",
     "cloud_max_tokens",
+    "cloud_replay_history",
 }
 #: Valid range for the cloud reply budget (tokens).
 _CLOUD_MAX_TOKENS_MIN = 1024
@@ -46,6 +53,9 @@ class Settings:
     cloud_model: str | None = None
     plugins_enabled: tuple[str, ...] | None = None
     cloud_max_tokens: int = _CLOUD_MAX_TOKENS_DEFAULT
+    #: Whether past turns may be replayed to a cloud provider. Off by default:
+    #: replaying the ledger sends earlier turns to a third party.
+    cloud_replay_history: bool = False
 
 
 def _home(env: Mapping[str, str]) -> Path:
@@ -125,6 +135,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
     cloud_model = None
     plugins_enabled: tuple[str, ...] | None = None
     cloud_max_tokens = _CLOUD_MAX_TOKENS_DEFAULT
+    cloud_replay_history = False
 
     if config_path.exists():
         try:
@@ -186,6 +197,11 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
                     f"{_CLOUD_MAX_TOKENS_MIN} and {_CLOUD_MAX_TOKENS_MAX}"
                 )
             cloud_max_tokens = value
+        if "cloud_replay_history" in document:
+            value = document["cloud_replay_history"]
+            if not isinstance(value, bool):
+                raise ConfigError("cloud_replay_history must be true or false")
+            cloud_replay_history = value
 
     env_database_path = source.get("SIGMAHELIX_DB_PATH")
     if env_database_path is not None:
@@ -212,6 +228,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         cloud_model,
         plugins_enabled,
         cloud_max_tokens,
+        cloud_replay_history,
     )
 
 
@@ -276,6 +293,53 @@ def save_plugin_settings(
             existing = {}
         document = dict(existing) if isinstance(existing, Mapping) else {}
     document["plugins_enabled"] = sorted({str(item) for item in enabled})
+    _validate_no_secrets(document)
+    unknown = set(document) - _ALLOWED_YAML_KEYS
+    if unknown:
+        raise ConfigError(f"unknown configuration keys: {sorted(unknown)}")
+    settings.config_path.parent.mkdir(parents=True, exist_ok=True)
+    settings.config_path.write_text(
+        yaml.safe_dump(document, sort_keys=True), encoding="utf-8"
+    )
+    return load_settings(source)
+
+
+def suggest_cloud_budget(current: int | None = None) -> int:
+    """A safe next cloud reply budget after truncation: double, clamped.
+
+    The ledger recommends this when a period shows truncated turns; ``apply`` then
+    writes it through :func:`save_cloud_budget`.
+    """
+    base = current or _CLOUD_MAX_TOKENS_DEFAULT
+    return min(_CLOUD_MAX_TOKENS_MAX, max(_CLOUD_MAX_TOKENS_MIN, base * 2))
+
+
+def save_cloud_budget(value: int, env: Mapping[str, str] | None = None) -> Settings:
+    """Persist the cloud reply budget to config.yaml.
+
+    Other keys (model mode, database path, plugin ids) are preserved. The value
+    must already be in the validated range; out-of-range requests are rejected
+    rather than silently clamped.
+    """
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int)
+        or not _CLOUD_MAX_TOKENS_MIN <= value <= _CLOUD_MAX_TOKENS_MAX
+    ):
+        raise ConfigError(
+            f"cloud_max_tokens must be an integer between "
+            f"{_CLOUD_MAX_TOKENS_MIN} and {_CLOUD_MAX_TOKENS_MAX}"
+        )
+    source = os.environ if env is None else env
+    settings = load_settings(source)
+    document: dict[str, object] = {}
+    if settings.config_path.exists():
+        try:
+            existing = yaml.safe_load(settings.config_path.read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError):
+            existing = {}
+        document = dict(existing) if isinstance(existing, Mapping) else {}
+    document["cloud_max_tokens"] = value
     _validate_no_secrets(document)
     unknown = set(document) - _ALLOWED_YAML_KEYS
     if unknown:

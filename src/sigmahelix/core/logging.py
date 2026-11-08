@@ -24,6 +24,8 @@ _SECRET_PATTERNS = (
         r"(?i)(\b(?:password|passwd|token|secret|api[_-]?key|access[_-]?key|client[_-]?secret|credential)\b\s*[:=]\s*)(?:\"[^\"]*\"|'[^']*'|[^\s,;&]+)"
     ),
     re.compile(r"\b(?:gh[pousr]_[A-Za-z0-9_]{12,}|github_pat_[A-Za-z0-9_]{12,})\b"),
+    # Provider keys that carry no label: sk-…, sk-ant-…, gsk_…
+    re.compile(r"\b(?:sk|gsk|rk|pk)-(?:[A-Za-z0-9_-]{16,})\b"),
     re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b"),
     re.compile(
         r"(?ms)(-----BEGIN [A-Z ]*PRIVATE KEY-----).*?(-----END [A-Z ]*PRIVATE KEY-----)"

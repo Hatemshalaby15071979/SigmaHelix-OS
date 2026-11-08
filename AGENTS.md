@@ -134,11 +134,18 @@ migration tests (`tests/core/test_migrations.py`) and extend
 - **Every turn is recorded in the metacognition ledger.** `Agent.process_command`
   opens a turn and closes it in `finally`; `app/metacognition.py` writes
   `agent_turns`/`agent_steps` and anchors each closed turn's content hash in
-  `audit_log`. Recording must never break a reply (all calls are wrapped), and a
-  report must never call a model for a number — every metric is SQL-derived and
-  every recommendation cites turn ids. Recommendations are never auto-applied:
-  `Ledger.decide` records the founder's approve/reject, and only whitelisted,
-  reversible kinds may be applied.
+  `audit_log`. The steps, the turn row, its proof and the anchor go into
+  **one transaction**, and the proof covers the digest of the steps — an edited
+  step, a deleted turn or a duplicate anchor fails `ledger verify`. Recording
+  must never break a reply (all calls are wrapped), and a report must never call
+  a model for a number — every metric is SQL-derived and every recommendation
+  cites turn ids. Recommendations are never auto-applied: `Ledger.decide` moves
+  a recommendation along an explicit transition table (`proposed → approved |
+  rejected`, `approved → rejected`, `rejected → approved | proposed`) and
+  audits every decision. A rejected recommendation is never re-proposed; only
+  the founder may reopen it. What is stored is redacted with
+  `core.logging.redact_text`, and past turns are replayed to a cloud provider
+  only when `cloud_replay_history` is on.
 - **Launches self-heal in Cloud mode too.** `Agent._handle_launch` →
   `Agent._remediate_launch` → `coder.install_project_requirements` creates a
   project-local `.venv` and installs the project's requirements when a launch
