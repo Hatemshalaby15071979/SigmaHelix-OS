@@ -105,6 +105,37 @@ class AppState:
             row["index"] = str(page.relative_to(project)) if page is not None else None
         return rows
 
+    # ---- metacognition ---------------------------------------------------
+    def metacognition(self, period: str = "7d") -> dict[str, Any]:
+        """Stored recommendations plus the deterministic report."""
+        ledger = self.agent.ledger
+        return {
+            "report": ledger.report(period),
+            "recommendations": ledger.recommendations(),
+            "turns": ledger.turns(limit=20),
+        }
+
+    def analyze(self, period: str = "7d") -> dict[str, Any]:
+        """Recompute recommendations from the ledger (idempotent)."""
+        ledger = self.agent.ledger
+        return {
+            "report": ledger.report(period),
+            "recommendations": ledger.recommend(period),
+            "turns": ledger.turns(limit=20),
+        }
+
+    def metacognition_turn(self, turn_id: str) -> dict[str, Any]:
+        return self.agent.ledger.turn(turn_id)
+
+    def feedback(self, turn_id: str, verdict: str, reason: str = "") -> dict[str, Any]:
+        self.agent.ledger.add_feedback(turn_id, verdict, reason=reason)
+        return {"ok": True, "turn_id": turn_id, "verdict": verdict}
+
+    def decide(self, rec_id: str, decision: str, note: str = "") -> dict[str, Any]:
+        if decision not in ("approved", "rejected"):
+            raise ValueError("decision must be 'approved' or 'rejected'")
+        return self.agent.ledger.decide(rec_id, decision, note=note)
+
     # ---- write -----------------------------------------------------------
     def chat(self, text: str) -> dict[str, Any]:
         reply = self.agent.process_command(text)
@@ -318,6 +349,18 @@ class Handler(BaseHTTPRequestHandler):
             if not self._authorised():
                 return self._error(HTTPStatus.FORBIDDEN, "bad token")
             return self._json(self.state.plugins_state())
+        if path.startswith("/api/metacognition/turns/"):
+            if not self._authorised():
+                return self._error(HTTPStatus.FORBIDDEN, "bad token")
+            turn_id = path.removeprefix("/api/metacognition/turns/")
+            if not turn_id:
+                return self._error(HTTPStatus.BAD_REQUEST, "missing turn id")
+            return self._json(self.state.metacognition_turn(turn_id))
+        if path == "/api/metacognition":
+            if not self._authorised():
+                return self._error(HTTPStatus.FORBIDDEN, "bad token")
+            period = (parse_qs(parsed.query).get("period") or ["7d"])[0]
+            return self._json(self.state.metacognition(period))
         return self._error(HTTPStatus.NOT_FOUND, "not found")
 
     def do_POST(self) -> None:  # noqa: N802
@@ -343,6 +386,32 @@ class Handler(BaseHTTPRequestHandler):
             if not text:
                 return self._error(HTTPStatus.BAD_REQUEST, "empty message")
             return self._json(self.state.chat(text))
+
+        if path == "/api/metacognition/analyze":
+            period = str(data.get("period") or "7d")
+            return self._json(self.state.analyze(period))
+
+        if path == "/api/metacognition/feedback":
+            turn_id = str(data.get("turn_id") or "").strip()
+            verdict = str(data.get("verdict") or "").strip()
+            if not turn_id or verdict not in ("good", "pushback"):
+                return self._error(
+                    HTTPStatus.BAD_REQUEST, "turn_id and verdict required"
+                )
+            return self._json(
+                self.state.feedback(turn_id, verdict, str(data.get("reason") or ""))
+            )
+
+        if path == "/api/metacognition/decide":
+            rec_id = str(data.get("rec_id") or "").strip()
+            decision = str(data.get("decision") or "").strip()
+            if not rec_id or decision not in ("approved", "rejected"):
+                return self._error(
+                    HTTPStatus.BAD_REQUEST, "rec_id and decision required"
+                )
+            return self._json(
+                self.state.decide(rec_id, decision, str(data.get("note") or ""))
+            )
 
         if path == "/api/tasks" and data.get("title"):
             questions = [str(q) for q in (data.get("questions") or [])]

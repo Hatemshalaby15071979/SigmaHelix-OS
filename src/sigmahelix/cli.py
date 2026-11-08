@@ -342,6 +342,107 @@ def _probe_backend(kind: str, agent, messages, composition) -> tuple[bool, str]:
     return False, f"{len(found)}/{len(composition.tokens)} tokens, missing {missing}"
 
 
+def command_ledger(args: argparse.Namespace) -> int:
+    """Inspect the metacognition ledger. Reports never invent numbers."""
+    from .app.metacognition import Ledger
+
+    ledger = Ledger(_open_database())
+    action = args.ledger_command
+
+    if action == "verify":
+        result = ledger.verify()
+        if result["valid"]:
+            print(
+                f"ledger valid — chain {result['entries_checked']} entries, "
+                f"{result['turns_checked']} turn proof(s), "
+                f"{result['unclosed']} unclosed"
+            )
+            return EXIT_OK
+        if not result["chain_valid"]:
+            print("ledger BROKEN: the audit chain does not verify", file=sys.stderr)
+        else:
+            print(
+                f"ledger BROKEN: turn proof mismatch at "
+                f"{result['mismatch']['turn_id']}",
+                file=sys.stderr,
+            )
+        return EXIT_FAILURE
+
+    if action == "report":
+        metrics = ledger.report(args.period)
+        recs = (
+            ledger.recommend(args.period) if args.analyze else ledger.recommendations()
+        )
+        if args.json:
+            print(json.dumps({"report": metrics, "recommendations": recs}, indent=2))
+            return EXIT_OK
+        outcomes = " · ".join(
+            f"{k} {v}" for k, v in sorted(metrics["outcomes"].items())
+        )
+        print(
+            f"{metrics['period']} · {metrics['turns']} turn(s) · "
+            f"success {metrics['success_rate']:.0%} · "
+            f"truncated {metrics['truncation_rate']:.0%} · "
+            f"pushback {metrics['pushback_rate']:.0%}"
+        )
+        print(f"outcomes: {outcomes or 'none'}")
+        if metrics["tool_calls"]:
+            tools = " · ".join(
+                f"{name} {bucket['total']}"
+                + (f" ({bucket['failed']} failed)" if bucket["failed"] else "")
+                for name, bucket in sorted(metrics["tool_calls"].items())
+            )
+            print(f"tools: {tools}")
+        if metrics["repeated_intents"]:
+            print(f"repeated intents: {len(metrics['repeated_intents'])}")
+        if not recs:
+            hint = (
+                "no rule fired for this period"
+                if args.analyze
+                else "run with --analyze to compute them"
+            )
+            print(f"recommendations: none ({hint})")
+            return EXIT_OK
+        print(f"\nrecommendations ({len(recs)}):")
+        for rec in recs:
+            print(f"  [{rec['id']}] {rec['kind']} · {rec['status']}")
+            print(f"    {rec['title']}")
+            print(f"    {rec['body']}")
+        return EXIT_OK
+
+    if action == "show":
+        row = ledger.turn(args.turn_id)
+        if args.json:
+            print(json.dumps(row, indent=2))
+            return EXIT_OK
+        print(f"{row['id']} · turn {row['turn_index']} · {row['outcome']}")
+        print(f"at      {row['started_at']}")
+        print(f"user    {row['user_text']}")
+        print(f"reply   {row['reply']}")
+        if row["plan"]:
+            print(f"plan    {row['plan']}")
+        for step in row["steps"]:
+            mark = "✓" if step["ok"] else "✗"
+            print(
+                f"  {step['seq']}. {step['action']} "
+                f"[{mark} · {step['duration_ms']}ms] {step['summary']}"
+            )
+        return EXIT_OK
+
+    if action == "feedback":
+        ledger.add_feedback(args.turn_id, args.verdict, reason=args.reason)
+        print(f"recorded {args.verdict} for {args.turn_id}")
+        return EXIT_OK
+
+    if action == "decide":
+        decision = "approved" if args.decision == "approve" else "rejected"
+        ledger.decide(args.rec_id, decision, note=args.note)
+        print(f"{args.rec_id} {decision}")
+        return EXIT_OK
+
+    return EXIT_USAGE
+
+
 def command_db(args: argparse.Namespace) -> int:
     database = _open_database()
     runner = MigrationRunner(database)
@@ -495,6 +596,33 @@ def build_parser() -> argparse.ArgumentParser:
     audit_list = audit_sub.add_parser("list", help="list recent entries")
     audit_list.add_argument("--limit", type=int, default=20)
 
+    ledger = subparsers.add_parser(
+        "ledger", help="inspect Tommy's metacognition ledger and recommendations"
+    )
+    ledger_sub = ledger.add_subparsers(dest="ledger_command", required=True)
+    ledger_sub.add_parser("verify", help="verify the audit chain and every turn proof")
+    ledger_report = ledger_sub.add_parser("report", help="metrics and recommendations")
+    ledger_report.add_argument("--period", default="7d", help="7d, 24h or 2w")
+    ledger_report.add_argument("--json", action="store_true")
+    ledger_report.add_argument(
+        "--analyze",
+        action="store_true",
+        help="recompute recommendations instead of showing stored ones",
+    )
+    ledger_show = ledger_sub.add_parser("show", help="print one turn and its steps")
+    ledger_show.add_argument("turn_id")
+    ledger_show.add_argument("--json", action="store_true")
+    ledger_feedback = ledger_sub.add_parser("feedback", help="judge one turn")
+    ledger_feedback.add_argument("turn_id")
+    ledger_feedback.add_argument("verdict", choices=("good", "pushback"))
+    ledger_feedback.add_argument("--reason", default="")
+    ledger_decide = ledger_sub.add_parser(
+        "decide", help="approve or reject a recommendation"
+    )
+    ledger_decide.add_argument("rec_id")
+    ledger_decide.add_argument("decision", choices=("approve", "reject"))
+    ledger_decide.add_argument("--note", default="")
+
     db = subparsers.add_parser("db", help="database maintenance")
     db_sub = db.add_subparsers(dest="db_command", required=True)
     db_sub.add_parser("upgrade", help="apply pending migrations")
@@ -528,6 +656,7 @@ COMMANDS = {
     "backup": command_backup,
     "restore": command_restore,
     "audit": command_audit,
+    "ledger": command_ledger,
     "db": command_db,
     "skills": command_skills,
 }

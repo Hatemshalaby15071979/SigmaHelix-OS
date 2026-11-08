@@ -8,6 +8,43 @@ All notable changes to SigmaHelix are recorded here. The format follows
 
 ### Added
 
+- **Metacognition ledger (migration v16).** Every turn is written to
+  `agent_turns` with its steps in `agent_steps`, and each closed turn's content
+  hash is anchored in the existing hash-chained `audit_log` — so a turn is
+  provable by id, timestamp and chain position. `sigmahelix ledger verify`
+  checks the chain and recomputes every proof.
+- **A deterministic self-report and recommendations.** `sigmahelix ledger
+  report` (and the **Mind** tab in the web UI) computes outcomes, success and
+  truncation rates, tool failure rates, pushback and repeated intents from SQL —
+  never from a model — and proposes typed recommendations (config, tool, prompt,
+  skill, plugin). Each recommendation cites the turn ids behind it; the founder
+  approves or rejects it, and nothing applies itself.
+- **A visible reasoning trail.** Every loop step is recorded with its action,
+  arguments, the model's own one-line `plan`, duration and result, and rendered
+  in the web UI, console and desktop window. `finish_reason` and a truncation
+  flag are part of the trace.
+- **`cloud_max_tokens` setting** (1024–16384, default 4096) with a per-request
+  budget and an 8192 retry for heavy tool payloads.
+- **Conversation persistence.** `_build_messages` reloads the last turns from
+  the ledger after a restart, so Tommy no longer claims it cannot see the
+  conversation.
+
+### Fixed
+
+- **The 500-token cap that cut tool calls in half.** A truncated reply is now
+  detected via `finish_reason == "length"`, retried once with a larger budget,
+  and reported — never echoed as raw `{"action": ...}` JSON. Malformed
+  action-shaped output is treated as a tool-call error, not an answer.
+- **Readiness score and verdict could disagree.** `assess_project` now computes
+  one weighted score from the same checks that produce `missing`, so
+  `score == 100` ⟺ `missing == []` ⟺ production-ready. Git state no longer
+  moves the score, and the `env_config` label is now the honest
+  "env template (.env.example)".
+- **Claims were not bound to evidence.** A final answer that says it created,
+  edited, fixed or committed something without a successful tool result in the
+  same turn gets one correction round, then a visible
+  `⚠️ unverified claim` prefix.
+
 - **Persona renamed to Tommy.** The assistant now introduces itself as Tommy in
   the web UI, desktop window and console. All skill injection is wired to Tommy.
 - **Dynamic web interface is the default.** `sigmahelix` now serves a

@@ -364,3 +364,66 @@ def test_state_reports_index_and_runnable_for_each_project(
     project = next(p for p in json.loads(body)["projects"] if p["name"] == "Demo")
     assert project["index"] == "index.html"
     assert project["launchables"][0]["kind"] == "dashboard"
+
+
+def test_metacognition_needs_the_token(server):
+    base, _ = server
+    with pytest.raises(urllib.error.HTTPError) as exc:
+        call(base, "/api/metacognition")
+    assert exc.value.code == 403
+
+
+def test_metacognition_returns_report_and_turns(server):
+    base, token = server
+    call(base, "/api/chat", token, {"text": "create task water the plants"})
+
+    status, body = call(base, "/api/metacognition", token)
+    data = json.loads(body)
+    assert status == 200
+    assert data["report"]["turns"] >= 1
+    assert isinstance(data["recommendations"], list)
+    assert data["turns"]
+    turn = data["turns"][0]
+    assert turn["user_text"] == "create task water the plants"
+
+    status, body = call(base, f"/api/metacognition/turns/{turn['id']}", token)
+    assert json.loads(body)["id"] == turn["id"]
+
+
+def test_metacognition_feedback_and_decide(server):
+    base, token = server
+    call(base, "/api/chat", token, {"text": "create task walk the dog"})
+    _, body = call(base, "/api/metacognition", token)
+    turn = json.loads(body)["turns"][0]
+
+    status, body = call(
+        base,
+        "/api/metacognition/feedback",
+        token,
+        {"turn_id": turn["id"], "verdict": "pushback", "reason": "too terse"},
+    )
+    assert json.loads(body)["verdict"] == "pushback"
+
+    _, body = call(base, "/api/metacognition/analyze", token, {"period": "7d"})
+    recs = json.loads(body)["recommendations"]
+    assert recs
+    rec_id = recs[0]["id"]
+    status, body = call(
+        base,
+        "/api/metacognition/decide",
+        token,
+        {"rec_id": rec_id, "decision": "approved", "note": "ok"},
+    )
+    assert json.loads(body)["status"] == "approved"
+
+
+def test_metacognition_rejects_bad_input(server):
+    base, token = server
+    with pytest.raises(urllib.error.HTTPError) as exc:
+        call(
+            base, "/api/metacognition/feedback", token, {"turn_id": "", "verdict": "x"}
+        )
+    assert exc.value.code == 400
+    with pytest.raises(urllib.error.HTTPError) as exc:
+        call(base, "/api/metacognition/decide", token, {"rec_id": "", "decision": "x"})
+    assert exc.value.code == 400

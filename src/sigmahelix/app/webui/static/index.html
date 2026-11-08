@@ -37,6 +37,9 @@
           <button class="nav-item" data-view="skills">
             <span aria-hidden="true">🧠</span> Skills <em id="skill-count">0</em>
           </button>
+          <button class="nav-item" data-view="mind">
+            <span aria-hidden="true">🧭</span> Mind
+          </button>
           <button class="nav-item" data-view="settings">
             <span aria-hidden="true">⚙️</span> Settings
           </button>
@@ -134,6 +137,38 @@
             <p>These ride on every model call, local or cloud. Tokens prove delivery.</p>
           </header>
           <ul class="list" id="skill-list"></ul>
+        </section>
+
+        <!-- mind -->
+        <section class="view" id="view-mind">
+          <header class="view-head">
+            <h1>Mind</h1>
+            <p>What Tommy did, what it cost, and what it recommends changing about itself. Nothing is applied without your approval.</p>
+          </header>
+
+          <div class="card">
+            <div class="mind-controls">
+              <label class="hint" for="mind-period">Period</label>
+              <select id="mind-period">
+                <option value="24h">24h</option>
+                <option value="7d" selected>7d</option>
+                <option value="2w">2w</option>
+              </select>
+              <button id="mind-analyze" class="ghost">Analyze now</button>
+            </div>
+            <p id="mind-summary" class="hint">No turns recorded yet.</p>
+            <div id="mind-tools" class="hint"></div>
+          </div>
+
+          <div class="card">
+            <h2>Recommendations</h2>
+            <div id="mind-recs"></div>
+          </div>
+
+          <div class="card">
+            <h2>Recent turns</h2>
+            <div id="mind-turns"></div>
+          </div>
         </section>
 
         <!-- settings -->

@@ -40,6 +40,8 @@ SigmaHelix/
 │   │   ├── agent.py        Tommy: local Ollama first, keyword fallback, cloud
 │   │   ├── coder.py         Coding tools: run_command/run_tests/audit_repo/edit_file
 │   │   │                   (workspace-confined, no shell, destructive deny-list)
+│   │   ├── metacognition.py Agent ledger: turns/steps/feedback/recommendations,
+│   │   │                   deterministic report, hash proof, approval workflow
 │   │   ├── plugins.py      Plugin registry: capabilities, presets, prompt + gate
 │   │   ├── tools.py        Real tools: fetch_url (SSRF-guarded), workspace files,
 │   │   │                   project readiness assessment, PDF writer
@@ -79,6 +81,11 @@ SigmaHelix/
   migration; add a new one.
 - **All writes go through `AppService`** so every mutation records one audit
   entry. UI code never touches `repositories` directly.
+- **The agent ledger is append-only in practice** (migration v16:
+  `agent_turns`, `agent_steps`, `agent_feedback`, `agent_recommendations`).
+  Each closed turn's content hash is anchored in `audit_log`; reports and
+  recommendations are computed by SQL, never by a model. Inspect with
+  `sigmahelix ledger verify|report|show|feedback|decide`.
 - **Secrets live in the OS keyring**, never in a file this repo writes.
 - **The web surface binds 127.0.0.1 only** and requires a per-session token.
 

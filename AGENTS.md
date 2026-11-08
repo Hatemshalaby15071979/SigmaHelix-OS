@@ -118,6 +118,27 @@ migration tests (`tests/core/test_migrations.py`) and extend
   disabled `code` plugin act. The loop prompt block is injected only in Cloud
   mode (`Agent.loop_block()`), so `system_prompt()` must reproduce the local
   prompt exactly when the loop is off.
+- **Never show raw model JSON, and never trust a truncated call.**
+  `try_cloud_query` reports `finish_reason`/`truncated` in the trace;
+  `_agent_loop` retries a truncated call once with a larger budget (8192 for
+  `file_operations`/`edit_file`/`run_command`/`audit_repo`) and otherwise reports
+  the cut-off. `Agent._looks_like_action` distinguishes a malformed tool call
+  from prose: the former is an error to retry, never a reply to display. The
+  reply budget comes from `Settings.cloud_max_tokens` — do not reintroduce a
+  constant.
+- **Every success claim needs a tool result.** `Agent._unverified_claim` checks
+  the final answer against the steps of the same turn (created/edited/fixed/
+  passing/committed/100). One correction round, then a visible
+  `⚠️ unverified claim` prefix. Keep this deterministic; do not replace it with
+  a model self-check.
+- **Every turn is recorded in the metacognition ledger.** `Agent.process_command`
+  opens a turn and closes it in `finally`; `app/metacognition.py` writes
+  `agent_turns`/`agent_steps` and anchors each closed turn's content hash in
+  `audit_log`. Recording must never break a reply (all calls are wrapped), and a
+  report must never call a model for a number — every metric is SQL-derived and
+  every recommendation cites turn ids. Recommendations are never auto-applied:
+  `Ledger.decide` records the founder's approve/reject, and only whitelisted,
+  reversible kinds may be applied.
 - **Launches self-heal in Cloud mode too.** `Agent._handle_launch` →
   `Agent._remediate_launch` → `coder.install_project_requirements` creates a
   project-local `.venv` and installs the project's requirements when a launch

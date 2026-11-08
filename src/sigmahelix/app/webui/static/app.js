@@ -38,7 +38,7 @@
     api(path, { method: "POST", body: JSON.stringify(payload || {}) });
 
   // ---------- navigation ----------
-  const VIEWS = ["chat", "tasks", "projects", "agenda", "notes", "skills", "settings"];
+  const VIEWS = ["chat", "tasks", "projects", "agenda", "notes", "skills", "mind", "settings"];
 
   function showView(name) {
     if (!VIEWS.includes(name)) name = "chat";
@@ -49,6 +49,7 @@
       v.classList.toggle("is-active", v.id === `view-${name}`);
     });
     if (location.hash !== `#${name}`) history.replaceState(null, "", `#${name}`);
+    if (name === "mind") loadMind(false);
   }
 
   document.querySelectorAll(".nav-item").forEach((button) => {
@@ -94,9 +95,32 @@
   }
 
   function addTrace(node, trace, fallbackModel) {
-    if (!trace || (!trace.thinking && !trace.total_tokens)) return;
+    if (!trace) return;
     const box = el("div", "trace");
     if (trace.thinking) box.appendChild(el("div", "thinking", `💭 ${trace.thinking}`));
+    const plans = trace.plans || [];
+    if (plans.length) {
+      box.appendChild(el("div", "plan", `🧭 ${plans.join(" → ")}`));
+    }
+    const steps = trace.steps || [];
+    if (steps.length) {
+      const details = document.createElement("details");
+      details.className = "steps";
+      details.open = true;
+      const head = document.createElement("summary");
+      head.textContent = `Reasoning — ${steps.length} step(s)`;
+      details.appendChild(head);
+      for (const s of steps) {
+        const mark = s.ok ? "✓" : "✗";
+        const args = s.args ? ` (${s.args})` : "";
+        const plan = s.plan ? ` — ${s.plan}` : "";
+        const ms = s.duration_ms != null ? ` · ${s.duration_ms}ms` : "";
+        details.appendChild(
+          el("div", "step", `${s.seq}. ${s.action}${args}${plan} [${mark}${ms}] ${s.summary || ""}`)
+        );
+      }
+      box.appendChild(details);
+    }
     const p = trace.prompt_tokens || 0;
     const c = trace.completion_tokens || 0;
     if (p || c) {
@@ -104,7 +128,10 @@
         el("span", "tokens", `${trace.model || fallbackModel} · ${p} in / ${c} out / ${p + c} tokens`)
       );
     }
-    node.appendChild(box);
+    if (trace.truncated) {
+      box.appendChild(el("span", "truncated", "⚠️ output truncated (token limit)"));
+    }
+    if (box.children.length) node.appendChild(box);
   }
 
   $("#chat-form").addEventListener("submit", async (event) => {
@@ -647,6 +674,131 @@
       setStatus(e.message, true);
     }
   });
+
+  // ---------- mind (metacognition) ----------
+  async function loadMind(analyze) {
+    const period = $("#mind-period").value;
+    try {
+      const data = analyze
+        ? await post("/api/metacognition/analyze", { period })
+        : await api(`/api/metacognition?period=${encodeURIComponent(period)}`);
+      renderMind(data);
+    } catch (e) {
+      setStatus(e.message, true);
+    }
+  }
+
+  function renderMind(data) {
+    const report = data.report || {};
+    const pct = (v) => `${Math.round((v || 0) * 100)}%`;
+    $("#mind-summary").textContent =
+      `${report.period || "7d"} · ${report.turns || 0} turn(s) · ` +
+      `success ${pct(report.success_rate)} · truncated ${pct(report.truncation_rate)} · ` +
+      `pushback ${pct(report.pushback_rate)}`;
+    const tools = report.tool_calls || {};
+    $("#mind-tools").textContent = Object.keys(tools).length
+      ? "tools: " +
+        Object.entries(tools)
+          .map(([name, b]) => `${name} ${b.total}${b.failed ? ` (${b.failed} failed)` : ""}`)
+          .join(" · ")
+      : "";
+
+    const recs = $("#mind-recs");
+    recs.replaceChildren();
+    const items = data.recommendations || [];
+    if (!items.length) {
+      recs.appendChild(el("p", "hint", "Nothing proposed. Press “Analyze now”."));
+    }
+    for (const rec of items) {
+      const card = el("div", "rec");
+      const head = el("div", "rec-head");
+      head.appendChild(el("strong", null, rec.title));
+      head.appendChild(el("span", "perm", `${rec.kind} · ${rec.status}`));
+      card.appendChild(head);
+      card.appendChild(el("p", "hint", rec.body));
+      if (rec.status === "proposed") {
+        const row = el("div", "rec-actions");
+        for (const [label, decision] of [["Approve", "approved"], ["Reject", "rejected"]]) {
+          const button = el("button", "ghost", label);
+          button.addEventListener("click", async () => {
+            try {
+              await post("/api/metacognition/decide", { rec_id: rec.id, decision });
+              setStatus(`${rec.title} ${decision}`);
+              loadMind(false);
+            } catch (e) {
+              setStatus(e.message, true);
+            }
+          });
+          row.appendChild(button);
+        }
+        card.appendChild(row);
+      }
+      recs.appendChild(card);
+    }
+
+    const turns = $("#mind-turns");
+    turns.replaceChildren();
+    const rows = (data.turns || []).slice().reverse();
+    if (!rows.length) turns.appendChild(el("p", "hint", "No turns recorded yet."));
+    for (const turn of rows) {
+      const details = document.createElement("details");
+      details.className = "turn";
+      const head = document.createElement("summary");
+      const mark = turn.outcome === "acted" || turn.outcome === "answered" ? "✓" : "✗";
+      head.textContent = `${mark} ${turn.user_text.slice(0, 80)} — ${turn.outcome}`;
+      details.appendChild(head);
+      details.appendChild(
+        el("div", "step", `${turn.reply || "(no reply)"}`)
+      );
+      details.appendChild(
+        el(
+          "div",
+          "step",
+          `${turn.model || "—"} · ${turn.total_tokens} tokens · ${turn.duration_ms}ms` +
+            (turn.truncated ? " · ⚠️ truncated" : "")
+        )
+      );
+      const feedback = el("div", "rec-actions");
+      for (const [label, verdict] of [["Good", "good"], ["Push back", "pushback"]]) {
+        const button = el("button", "ghost", label);
+        button.addEventListener("click", async () => {
+          try {
+            await post("/api/metacognition/feedback", { turn_id: turn.id, verdict });
+            setStatus(`recorded ${verdict}`);
+          } catch (e) {
+            setStatus(e.message, true);
+          }
+        });
+        feedback.appendChild(button);
+      }
+      details.appendChild(feedback);
+      details.addEventListener("toggle", async () => {
+        if (!details.open || details.dataset.loaded) return;
+        details.dataset.loaded = "1";
+        try {
+          const full = await api(
+            `/api/metacognition/turns/${encodeURIComponent(turn.id)}`
+          );
+          for (const s of full.steps || []) {
+            details.appendChild(
+              el(
+                "div",
+                "step",
+                `${s.seq}. ${s.action}${s.plan ? ` — ${s.plan}` : ""} ` +
+                  `[${s.ok ? "✓" : "✗"} · ${s.duration_ms}ms] ${s.summary || ""}`
+              )
+            );
+          }
+        } catch (e) {
+          setStatus(e.message, true);
+        }
+      });
+      turns.appendChild(details);
+    }
+  }
+
+  $("#mind-analyze").addEventListener("click", () => loadMind(true));
+  $("#mind-period").addEventListener("change", () => loadMind(false));
 
   // ---------- refresh ----------
   async function refresh() {

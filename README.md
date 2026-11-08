@@ -29,7 +29,7 @@ without a browser.
 | Projects | Auto-discovers the `cloned_repos` folder (works from the source checkout *and* an installed binary) and scans it on every run, reading git state, scoring health, and giving every project a **▶ Run** link (starts its desktop app, npm/Streamlit/FastAPI/Flask server or compose stack in a terminal) plus a link to its `index.html` served from the project folder |
 | Calendar | Month view built from task occurrences and due dates |
 | Launchers | Named argv profiles per project with a whitelisted environment and no shell |
-| Assistant | **Tommy** — local Ollama first, deterministic keyword fallback, optional cloud providers. Always shows its thinking and token usage. Tommy is a real agent with tools: he **visits public URLs and reads them**, **reads/searches/creates/modifies any file in `cloned_repos`**, **assesses every project for production readiness** (readme, tests, CI, container, env template, build, git), **builds runnable projects** (with a Run link), and **writes real PDFs** — instead of refusing. **In Cloud mode he is a coding agent**: a bounded multi-step loop audits a repo, runs its tests, reads the real failures, edits the code, runs the tests again, and reports what changed and what still fails — a list of file names is never the answer to "fix this". Local/Hybrid keep the single-shot behaviour. |
+| Assistant | **Tommy** — local Ollama first, deterministic keyword fallback, optional cloud providers. Always shows its thinking and token usage. Tommy is a real agent with tools: he **visits public URLs and reads them**, **reads/searches/creates/modifies any file in `cloned_repos`**, **assesses every project for production readiness** (readme, tests, CI, container, env template, build, git), **builds runnable projects** (with a Run link), and **writes real PDFs** — instead of refusing. **In Cloud mode he is a coding agent**: a bounded multi-step loop audits a repo, runs its tests, reads the real failures, edits the code, runs the tests again, and reports what changed and what still fails — a list of file names is never the answer to "fix this". Local/Hybrid keep the single-shot behaviour. Every turn is recorded in a local, hash-proven **metacognition ledger**; the **Mind** tab shows what he did, what it cost and what he recommends changing about himself — and nothing is applied without your approval. |
 | Skills | Tommy auto-loads a fixed set of skills into every model call (frontend/webapp, UI design, DevOps, prompt engineering, `i-have-adhd` and your personal `Hatem_specific`), so they apply to any model, local or cloud |
 | Plugins | Tommy is **one persona with every capability on** — every feature is a plugin. Settings → **Plugins** lets you trim one off for a specific task (with **Reset to full Tommy**); the enabled set is persisted and Tommy only ever sees the actions you enabled |
 | Reminders | Persisted scheduler, notification inbox, alarm state machine (snooze, dismiss, reschedule) |
@@ -84,6 +84,11 @@ sigmahelix backup --destination FILE
 sigmahelix restore --source FILE --destination FILE
 sigmahelix audit verify        verify the whole hash chain
 sigmahelix audit list          recent audit entries
+sigmahelix ledger verify       verify the audit chain and every turn proof
+sigmahelix ledger report       metrics + recommendations (--analyze, --period 7d)
+sigmahelix ledger show ID      one turn with its reasoning steps
+sigmahelix ledger feedback ID good|pushback
+sigmahelix ledger decide ID approve|reject --note "..."
 sigmahelix db upgrade          apply pending migrations
 sigmahelix db info             show the schema version
 ```
