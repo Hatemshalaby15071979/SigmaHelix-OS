@@ -238,6 +238,17 @@ class Agent:
         self.cloud_model = None  # selected cloud model id (if any)
         self.cloud_provider = None  # openai | openrouter | deepseek
         self.api_keys = {}  # Store API keys for OpenAI/OpenRouter
+        # Restore the user's last model-mode selection so a restart keeps it.
+        try:
+            from ..core.config import load_settings
+
+            saved = load_settings()
+            if saved.model_mode in ("local", "cloud", "hybrid"):
+                self.model_kind = saved.model_mode
+            self.cloud_provider = saved.cloud_provider
+            self.cloud_model = saved.cloud_model
+        except Exception:  # noqa: BLE001 - fall back to in-memory defaults
+            pass
         self.injected_skills = {}  # Store user-injected capability prompts
         self.persona_style = "honest"  # Tommy persona style: honest, human, evidence
         # Operating instructions that follow every model call, local or cloud.
@@ -359,6 +370,23 @@ class Agent:
     def _set_model_kind(self, kind):
         """Set the model kind: local, cloud, or hybrid."""
         self.model_kind = kind
+
+    def apply_settings(
+        self, mode: str, cloud_provider: str | None, cloud_model: str | None
+    ) -> None:
+        """Apply a model-mode selection to this live agent.
+
+        Persists the choice to config (so it survives restart) and updates the
+        in-memory routing used by the next turn.
+        """
+        from ..core.config import save_model_settings
+
+        if mode not in ("local", "cloud", "hybrid"):
+            raise ValueError(f"unknown model mode: {mode!r}")
+        save_model_settings(mode, cloud_provider, cloud_model)
+        self.model_kind = mode
+        self.cloud_provider = cloud_provider
+        self.cloud_model = cloud_model
 
     def _local_model_candidates(self):
         """Models to try in order: the current pick, then the rest the server has.

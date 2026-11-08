@@ -94,5 +94,8 @@ migration tests (`tests/core/test_migrations.py`) and extend
   files unless asked.
 - When the user runs `sigmahelix` with no subcommand, it serves the web UI — do
   not "fix" the default to the Tk window.
+- Model mode (Local/Cloud/Hybrid) and API keys are managed in the web UI
+  **Settings** view (⚙️). The mode persists to `~/.config/sigmahelix/config.yaml`
+  and is reloaded on startup; keys go to the OS keyring only, never to config.
 - Run the gate before declaring work done; if a test fails, fix the code or the
   test's stale assumption, but never delete or disable tests to make it pass.

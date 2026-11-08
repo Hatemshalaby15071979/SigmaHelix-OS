@@ -262,3 +262,30 @@ button, input, select, textarea { font: inherit; color: inherit; }
   color: var(--text); cursor: pointer; padding: 4px 11px; border-radius: 999px; font-size: 12px;
 }
 .chip:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ---------- settings ---------- */
+.settings-card { margin-bottom: 16px; }
+.settings-card h2 { font-size: 15px; margin: 0 0 4px; }
+.settings-card .hint { color: var(--dim); font-size: 12px; margin: 0 0 10px; }
+.seg { display: inline-flex; gap: 6px; margin-bottom: 10px; }
+.seg-btn {
+  border: 1px solid var(--border); background: var(--panel); color: var(--text);
+  cursor: pointer; padding: 7px 16px; border-radius: 9px; font-size: 13px;
+}
+.seg-btn.is-active { background: var(--accent); color: #07101e; border-color: var(--accent); font-weight: 600; }
+.field { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+.field label { font-size: 13px; color: var(--dim); min-width: 70px; }
+.field select {
+  background: var(--panel); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 10px; font-size: 13px;
+}
+.key-rows { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+.key-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.key-row .pname { width: 90px; font-size: 13px; }
+.key-row input {
+  flex: 1; min-width: 200px; background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; font-size: 13px;
+}
+.kstate { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--dim); }
+.kstate.ok { color: var(--good); border-color: var(--good); }
+.kstate.warn { color: var(--bad); border-color: var(--bad); }

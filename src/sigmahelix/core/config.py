@@ -13,8 +13,15 @@ import yaml
 _SECRET_NAME = re.compile(
     r"secret|token|password|credential|private.?key|api.?key", re.I
 )
-_ALLOWED_YAML_KEYS = {"database_path", "log_level"}
+_ALLOWED_YAML_KEYS = {
+    "database_path",
+    "log_level",
+    "model_mode",
+    "cloud_provider",
+    "cloud_model",
+}
 _ALLOWED_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+_ALLOWED_MODEL_MODES = {"local", "cloud", "hybrid"}
 
 
 class ConfigError(ValueError):
@@ -28,6 +35,9 @@ class Settings:
     config_path: Path
     database_path: Path
     log_level: str
+    model_mode: str = "local"
+    cloud_provider: str | None = None
+    cloud_model: str | None = None
 
 
 def _home(env: Mapping[str, str]) -> Path:
@@ -102,6 +112,9 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
             strict=False
         )
     log_level = "INFO"
+    model_mode = "local"
+    cloud_provider = None
+    cloud_model = None
 
     if config_path.exists():
         try:
@@ -127,6 +140,23 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
             if not isinstance(value, str):
                 raise ConfigError("log_level must be a string")
             log_level = value.upper()
+        if "model_mode" in document:
+            value = document["model_mode"]
+            if not isinstance(value, str) or value not in _ALLOWED_MODEL_MODES:
+                raise ConfigError(
+                    f"model_mode must be one of {sorted(_ALLOWED_MODEL_MODES)}"
+                )
+            model_mode = value
+        if "cloud_provider" in document and document["cloud_provider"] is not None:
+            value = document["cloud_provider"]
+            if not isinstance(value, str):
+                raise ConfigError("cloud_provider must be a string")
+            cloud_provider = value
+        if "cloud_model" in document and document["cloud_model"] is not None:
+            value = document["cloud_model"]
+            if not isinstance(value, str):
+                raise ConfigError("cloud_model must be a string")
+            cloud_model = value
 
     env_database_path = source.get("SIGMAHELIX_DB_PATH")
     if env_database_path is not None:
@@ -144,4 +174,54 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
             )
     if log_level not in _ALLOWED_LOG_LEVELS:
         raise ConfigError(f"log_level must be one of {sorted(_ALLOWED_LOG_LEVELS)}")
-    return Settings(config_path, database_path, log_level)
+    return Settings(
+        config_path,
+        database_path,
+        log_level,
+        model_mode,
+        cloud_provider,
+        cloud_model,
+    )
+
+
+def save_model_settings(
+    model_mode: str,
+    cloud_provider: str | None = None,
+    cloud_model: str | None = None,
+    env: Mapping[str, str] | None = None,
+) -> Settings:
+    """Persist the model mode selection to config.yaml.
+
+    Only the non-secret model selection is stored here; API keys live in the OS
+    keyring and are never written to this file. Existing keys (``database_path``,
+    ``log_level``) are preserved. Unknown or secret keys are rejected.
+    """
+    if model_mode not in _ALLOWED_MODEL_MODES:
+        raise ConfigError(f"model_mode must be one of {sorted(_ALLOWED_MODEL_MODES)}")
+    source = os.environ if env is None else env
+    settings = load_settings(source)
+    document: dict[str, object] = {}
+    if settings.config_path.exists():
+        try:
+            existing = yaml.safe_load(settings.config_path.read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError):
+            existing = {}
+        document = dict(existing) if isinstance(existing, Mapping) else {}
+    document["model_mode"] = model_mode
+    if cloud_provider is not None:
+        document["cloud_provider"] = cloud_provider
+    elif "cloud_provider" in document:
+        del document["cloud_provider"]
+    if cloud_model is not None:
+        document["cloud_model"] = cloud_model
+    elif "cloud_model" in document:
+        del document["cloud_model"]
+    _validate_no_secrets(document)
+    unknown = set(document) - _ALLOWED_YAML_KEYS
+    if unknown:
+        raise ConfigError(f"unknown configuration keys: {sorted(unknown)}")
+    settings.config_path.parent.mkdir(parents=True, exist_ok=True)
+    settings.config_path.write_text(
+        yaml.safe_dump(document, sort_keys=True), encoding="utf-8"
+    )
+    return load_settings(source)

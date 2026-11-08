@@ -63,7 +63,7 @@ For development, install into the checkout instead:
 | --- | --- |
 | `~/.local/share/sigmahelix/sigmahelix.db` | The database (mode 0600, WAL, `synchronous=FULL`) |
 | OS keyring (`sigmahelix` service) | Cloud provider API keys, never a file |
-| `~/.config/sigmahelix/config.yaml` | Optional settings: `database_path`, `log_level` |
+| `~/.config/sigmahelix/config.yaml` | Optional settings: `database_path`, `log_level`, `model_mode` (`local`/`cloud`/`hybrid`), `cloud_provider`, `cloud_model` |
 | `~/.local/state/sigmahelix/logs/` | Rotating JSON logs with secret redaction |
 
 Override the data directory with `SIGMAHELIX_DATA_DIR` (this also moves the
@@ -74,7 +74,7 @@ microphone or speech hardware.
 ## Commands
 
 ```
-sigmahelix                     start the desktop app
+sigmahelix                     start the web app (localhost, browser)
 sigmahelix chat                interactive console assistant
 sigmahelix status              database path, schema version, counts, audit state
 sigmahelix doctor              environment report: dependencies, database, model server

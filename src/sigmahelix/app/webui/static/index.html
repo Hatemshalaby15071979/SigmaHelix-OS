@@ -37,6 +37,9 @@
           <button class="nav-item" data-view="skills">
             <span aria-hidden="true">🧠</span> Skills <em id="skill-count">0</em>
           </button>
+          <button class="nav-item" data-view="settings">
+            <span aria-hidden="true">⚙️</span> Settings
+          </button>
         </nav>
 
         <div class="rail-foot">
@@ -131,6 +134,40 @@
             <p>These ride on every model call, local or cloud. Tokens prove delivery.</p>
           </header>
           <ul class="list" id="skill-list"></ul>
+        </section>
+
+        <!-- settings -->
+        <section class="view" id="view-settings">
+          <header class="view-head">
+            <h1>Settings</h1>
+            <p>Choose how Tommy runs, and add a cloud API key. Keys are stored in your OS keyring — never in a file.</p>
+          </header>
+
+          <div class="card settings-card">
+            <h2>Model mode</h2>
+            <p class="hint">Local runs on your machine. Cloud uses a provider API key. Hybrid reasons in the cloud and runs locally.</p>
+            <div class="seg" id="mode-seg">
+              <button class="seg-btn" data-mode="local">Local</button>
+              <button class="seg-btn" data-mode="cloud">Cloud</button>
+              <button class="seg-btn" data-mode="hybrid">Hybrid</button>
+            </div>
+            <div class="field">
+              <label for="cloud-provider">Provider</label>
+              <select id="cloud-provider">
+                <option value="">— none —</option>
+                <option value="openai">OpenAI</option>
+                <option value="openrouter">OpenRouter</option>
+                <option value="deepseek">DeepSeek</option>
+              </select>
+            </div>
+            <p id="mode-status" class="hint"></p>
+          </div>
+
+          <div class="card settings-card">
+            <h2>Cloud API keys</h2>
+            <p class="hint">Add or replace a key, then verify it live. Verified keys turn green.</p>
+            <div id="key-rows" class="key-rows"></div>
+          </div>
         </section>
       </main>
     </div>

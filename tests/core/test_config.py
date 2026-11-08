@@ -3,8 +3,64 @@ from types import SimpleNamespace
 
 import pytest
 
-from sigmahelix.core.config import ConfigError, Settings, load_settings
+from sigmahelix.core.config import (
+    ConfigError,
+    Settings,
+    load_settings,
+    save_model_settings,
+)
 from sigmahelix.core.secrets import KeyringSecretStore, SecretStoreError
+
+
+def _env(home, config_file):
+    return {
+        "HOME": str(home),
+        "SIGMAHELIX_CONFIG_FILE": str(config_file),
+    }
+
+
+def test_save_model_settings_round_trips_through_config_file(tmp_path):
+    config_path = tmp_path / "settings" / "config.yaml"
+    env = _env(tmp_path / "home", config_path)
+
+    saved = save_model_settings("hybrid", "openrouter", "openai/gpt-4o-mini", env=env)
+    assert saved.model_mode == "hybrid"
+    assert saved.cloud_provider == "openrouter"
+    assert saved.cloud_model == "openai/gpt-4o-mini"
+
+    reloaded = load_settings(env)
+    assert reloaded.model_mode == "hybrid"
+    assert reloaded.cloud_provider == "openrouter"
+    assert reloaded.cloud_model == "openai/gpt-4o-mini"
+
+    # Only non-secret model selection is written; no API key ever lands here.
+    on_disk = config_path.read_text(encoding="utf-8")
+    assert "model_mode: hybrid" in on_disk
+    assert "openrouter" in on_disk
+    assert "api" not in on_disk.lower() and "key" not in on_disk.lower()
+
+
+def test_save_model_settings_clears_provider_when_passed_none(tmp_path):
+    config_path = tmp_path / "settings" / "config.yaml"
+    env = _env(tmp_path / "home", config_path)
+
+    save_model_settings("cloud", "openrouter", "openai/gpt-4o-mini", env=env)
+    second = save_model_settings("local", None, None, env=env)
+    assert second.model_mode == "local"
+    assert second.cloud_provider is None
+    assert second.cloud_model is None
+
+    reloaded = load_settings(env)
+    assert reloaded.cloud_provider is None
+    assert reloaded.cloud_model is None
+
+
+def test_save_model_settings_rejects_unknown_mode(tmp_path):
+    config_path = tmp_path / "settings" / "config.yaml"
+    env = _env(tmp_path / "home", config_path)
+
+    with pytest.raises(ConfigError, match="model_mode must be one of"):
+        save_model_settings("bogus", None, None, env=env)
 
 
 class MemoryKeyring:

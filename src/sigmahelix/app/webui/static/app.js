@@ -448,6 +448,112 @@
     }
   }
 
+  // ---------- settings ----------
+  let settings = { mode: "local", providers: [], cloud_auth: {}, local_available: false, local_models: [] };
+
+  async function loadSettings() {
+    settings = await api("/api/settings");
+    renderSettings();
+  }
+
+  function renderSettings() {
+    document.querySelectorAll("#mode-seg .seg-btn").forEach((b) => {
+      b.classList.toggle("is-active", b.dataset.mode === settings.mode);
+    });
+    const provider = settings.cloud_provider || "";
+    $("#cloud-provider").value = provider;
+    const auth = settings.cloud_auth || {};
+    const status = $("#mode-status");
+    if (settings.mode === "local") {
+      status.textContent = settings.local_available
+        ? `Local model ready: ${settings.local_models.join(", ") || settings.model_name}`
+        : "No local model server detected — start Ollama to use Local mode.";
+    } else if (settings.mode === "cloud") {
+      status.textContent = auth.any
+        ? "Cloud mode active with a verified key."
+        : "Cloud mode needs a verified API key below.";
+    } else {
+      status.textContent = auth.any
+        ? "Hybrid mode: cloud reasons, local executes."
+        : "Hybrid mode needs a verified API key for the cloud half.";
+    }
+
+    const rows = $("#key-rows");
+    rows.replaceChildren();
+    for (const p of settings.providers) {
+      const row = el("div", "key-row");
+      row.appendChild(el("span", "pname", p.name));
+      const input = el("input");
+      input.type = "password";
+      input.placeholder = p.has_key ? "•••••••• (replace to change)" : "paste API key";
+      input.setAttribute("aria-label", `${p.name} API key`);
+      row.appendChild(input);
+      const state2 = el("span", `kstate ${p.verified ? "ok" : p.has_key ? "warn" : ""}`,
+        p.verified ? "verified" : p.has_key ? "unverified" : "no key");
+      row.appendChild(state2);
+      const save = el("button", "primary", "Save & verify");
+      save.addEventListener("click", async () => {
+        const key = input.value.trim();
+        if (!key) return;
+        save.disabled = true;
+        try {
+          const res = await post("/api/settings/key", { provider: p.name, key });
+          settings = res;
+          renderSettings();
+          if (!res.ok) setStatus(`${p.name}: ${res.message}`, true);
+          else setStatus(`${p.name} key verified`);
+        } catch (e) {
+          setStatus(e.message, true);
+        } finally {
+          save.disabled = false;
+        }
+      });
+      row.appendChild(save);
+      if (p.has_key) {
+        const del = el("button", "icon-btn", "remove");
+        del.addEventListener("click", async () => {
+          try {
+            settings = await post("/api/settings/key/delete", { provider: p.name });
+            renderSettings();
+          } catch (e) {
+            setStatus(e.message, true);
+          }
+        });
+        row.appendChild(del);
+      }
+      rows.appendChild(row);
+    }
+  }
+
+  document.querySelectorAll("#mode-seg .seg-btn").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const mode = btn.dataset.mode;
+      try {
+        settings = await post("/api/settings", {
+          mode,
+          cloud_provider: $("#cloud-provider").value || null,
+          cloud_model: null,
+        });
+        renderSettings();
+        setStatus(`mode → ${mode}`);
+      } catch (e) {
+        setStatus(e.message, true);
+      }
+    });
+  });
+
+  $("#cloud-provider").addEventListener("change", async () => {
+    try {
+      settings = await post("/api/settings", {
+        mode: settings.mode,
+        cloud_provider: $("#cloud-provider").value || null,
+        cloud_model: null,
+      });
+    } catch (e) {
+      setStatus(e.message, true);
+    }
+  });
+
   // ---------- refresh ----------
   async function refresh() {
     setStatus("refreshing…");
@@ -462,6 +568,7 @@
         ? state.model.name
         : "keyword mode";
       $("#agenda-text").textContent = state.agenda || "";
+      await loadSettings();
       setStatus(`updated ${new Date().toLocaleTimeString()}`);
     } catch (error) {
       setStatus(error.message, true);

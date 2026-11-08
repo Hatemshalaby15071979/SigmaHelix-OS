@@ -658,6 +658,33 @@ def forget_api_key(provider):
             store.delete(name)
 
 
+def verify_cloud_key(provider: str, key: str, timeout: int = 25) -> tuple[bool, str]:
+    """Live-probe a provider key and persist the verification result.
+
+    Stores the key in the keyring (unverified), runs one tiny completion, and
+    marks it verified only when the provider actually answers. Returns
+    ``(ok, message)`` so the UI can show why a key was rejected.
+    """
+    if provider not in PROVIDERS:
+        return False, f"unknown provider: {provider}"
+    key = str(key or "").strip()
+    if not key:
+        return False, "empty key"
+    set_api_key(provider, key)
+    model = default_cloud_model(provider)
+    if not model:
+        return False, f"{provider}: no usable model for this key"
+    reply, err = try_cloud_query(
+        provider, model, key, "reply with the single word: ok", timeout=timeout
+    )
+    if reply and str(reply).strip():
+        mark_verified(provider, True)
+        return True, "verified"
+    message = err or "no response"
+    mark_verified(provider, False)
+    return False, message
+
+
 def check_cloud_auth():
     """Check which cloud providers are genuinely usable (key present + verified)."""
     keys = load_api_keys()

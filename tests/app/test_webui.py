@@ -9,9 +9,50 @@ import urllib.request
 from http.server import ThreadingHTTPServer
 
 import pytest
+import yaml
 
 from sigmahelix.app import agent as agent_module
+from sigmahelix.app import models as app_models
 from sigmahelix.app.webui.server import AppState, Handler
+from sigmahelix.core.secrets import KeyringSecretStore
+
+
+class _MemoryKeyring:
+    """Keyring backend that keeps secrets in a dict (for isolated tests)."""
+
+    def __init__(self):
+        self.values = {}
+
+    def get_password(self, service_name, username):
+        return self.values.get((service_name, username))
+
+    def set_password(self, service_name, username, password):
+        self.values[(service_name, username)] = password
+
+    def delete_password(self, service_name, username):
+        self.values.pop((service_name, username), None)
+
+
+@pytest.fixture
+def settings_server(tmp_path, monkeypatch):
+    """A web server with an isolated config file and an in-memory keyring."""
+    config_path = tmp_path / "config.yaml"
+    monkeypatch.setenv("SIGMAHELIX_CONFIG_FILE", str(config_path))
+    monkeypatch.setenv("SIGMAHELIX_NO_NETWORK", "1")
+    store = KeyringSecretStore(backend=_MemoryKeyring())
+    monkeypatch.setattr(app_models, "_secret_store", store)
+    monkeypatch.setattr(
+        agent_module.Agent, "_check_llm", lambda self, timeout=2.0: False
+    )
+    state = AppState()
+    handler = type("TestHandler", (Handler,), {"state": state})
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{httpd.server_address[1]}"
+    yield base, state.token, config_path
+    httpd.shutdown()
+    httpd.server_close()
 
 
 @pytest.fixture
@@ -113,3 +154,103 @@ def test_unknown_route_is_404(server):
     with pytest.raises(urllib.error.HTTPError) as exc:
         call(base, "/api/nope", token)
     assert exc.value.code == 404
+
+
+def test_get_settings_reports_mode_and_providers(settings_server):
+    base, token, _ = settings_server
+    status, body = call(base, "/api/settings", token)
+    assert status == 200
+    data = json.loads(body)
+    assert data["mode"] == "local"
+    assert data["cloud_provider"] is None
+    assert isinstance(data["providers"], list)
+    assert {p["name"] for p in data["providers"]} == {
+        "openai",
+        "openrouter",
+        "deepseek",
+    }
+    for provider in data["providers"]:
+        assert set(provider) >= {"name", "has_key", "verified"}
+        assert provider["has_key"] is False
+        assert provider["verified"] is False
+    assert isinstance(data["cloud_auth"], dict)
+    assert data["cloud_auth"]["any"] is False
+    assert isinstance(data["local_models"], list)
+    assert data["model_name"]
+
+
+def test_post_settings_changes_mode_and_persists_to_config(settings_server):
+    base, token, config_path = settings_server
+    status, body = call(
+        base,
+        "/api/settings",
+        token,
+        {"mode": "cloud", "cloud_provider": "openrouter"},
+    )
+    assert status == 200
+    data = json.loads(body)
+    assert data["mode"] == "cloud"
+    assert data["cloud_provider"] == "openrouter"
+
+    # A restart would read the same selection back from disk.
+    on_disk = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    assert on_disk["model_mode"] == "cloud"
+    assert on_disk["cloud_provider"] == "openrouter"
+
+    # The change is reflected by a later read too.
+    _, body = call(base, "/api/settings", token)
+    assert json.loads(body)["mode"] == "cloud"
+
+
+def test_post_settings_rejects_unknown_mode(settings_server):
+    base, token, _ = settings_server
+    with pytest.raises(urllib.error.HTTPError) as exc:
+        call(base, "/api/settings", token, {"mode": "telepathic"})
+    assert exc.value.code == 400
+
+
+def test_settings_update_requires_the_token(settings_server):
+    base, _, _ = settings_server
+    with pytest.raises(urllib.error.HTTPError) as exc:
+        call(base, "/api/settings", None, {"mode": "hybrid"})
+    assert exc.value.code == 403
+
+
+def test_set_key_rejects_a_failing_probe(settings_server, monkeypatch):
+    base, token, _ = settings_server
+    monkeypatch.setattr(
+        app_models,
+        "verify_cloud_key",
+        lambda provider, key, timeout=25: (False, "probe failed"),
+    )
+    status, body = call(
+        base,
+        "/api/settings/key",
+        token,
+        {"provider": "openrouter", "key": "sk-bogus"},
+    )
+    data = json.loads(body)
+    assert status == 200
+    assert data["ok"] is False
+    assert data["message"] == "probe failed"
+    # A rejected key must not linger as configured.
+    assert all(p["has_key"] is False for p in data["providers"])
+
+
+def test_delete_key_clears_a_configured_provider(settings_server):
+    base, token, _ = settings_server
+    app_models.set_api_key("openrouter", "sk-or-v1-test")
+    app_models.mark_verified("openrouter", True)
+
+    before_status, before = call(base, "/api/settings", token)
+    assert before_status == 200
+    assert json.loads(before)["providers"][1]["has_key"] is True
+
+    status, body = call(
+        base, "/api/settings/key/delete", token, {"provider": "openrouter"}
+    )
+    assert status == 200
+    after = json.loads(body)
+    openrouter = next(p for p in after["providers"] if p["name"] == "openrouter")
+    assert openrouter["has_key"] is False
+    assert openrouter["verified"] is False

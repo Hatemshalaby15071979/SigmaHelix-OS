@@ -29,7 +29,7 @@ SigmaHelix/
 │   ├── cli.py             Argument parsing + subcommand dispatch
 │   ├── core/              Provider-agnostic domain + storage (NO UI, NO network)
 │   │   ├── models.py      Frozen dataclasses: Task, Note, Project, TaskQuestion, …
-│   │   ├── config.py      Settings load/save (keyring for secrets)
+│   │   ├── config.py      Settings load/save, model-mode persistence (keyring for secrets)
 │   │   └── storage/       SQLite database, repositories, migrations, backup
 │   │       ├── database.py        Connection + WAL + initialize()
 │   │       ├── migrations.py     Ordered, contiguous, downgrade-guarded migrations

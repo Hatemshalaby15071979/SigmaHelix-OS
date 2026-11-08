@@ -126,6 +126,63 @@ class AppState:
         ok, message = launch(items[index])
         return {"ok": ok, "message": message}
 
+    def settings(self) -> dict[str, Any]:
+        """Current model-mode + cloud key state for the Settings view."""
+        from ..models import (
+            PROVIDERS,
+            check_cloud_auth,
+            load_api_keys,
+        )
+
+        keys = load_api_keys()
+        verified = keys.get("_verified") or {}
+        providers = []
+        for name in PROVIDERS:
+            providers.append(
+                {
+                    "name": name,
+                    "has_key": bool(str(keys.get(name) or "").strip()),
+                    "verified": bool(verified.get(name)),
+                }
+            )
+        local = []
+        try:
+            from ..models import get_local_models
+
+            local = get_local_models()
+        except Exception:  # noqa: BLE001 - local listing is best-effort
+            local = []
+        return {
+            "mode": self.agent.model_kind,
+            "cloud_provider": self.agent.cloud_provider,
+            "cloud_model": self.agent.cloud_model,
+            "providers": providers,
+            "cloud_auth": check_cloud_auth(),
+            "local_available": bool(local),
+            "local_models": [m["value"] for m in local],
+            "model_name": self.agent.model_name,
+        }
+
+    def save_settings(
+        self, mode: str, cloud_provider: str | None, cloud_model: str | None
+    ) -> dict[str, Any]:
+        """Persist and apply the model-mode selection to the live agent."""
+        self.agent.apply_settings(mode, cloud_provider, cloud_model)
+        return self.settings()
+
+    def set_key(self, provider: str, key: str) -> dict[str, Any]:
+        """Store a provider key in the keyring and live-verify it."""
+        from ..models import verify_cloud_key
+
+        ok, message = verify_cloud_key(provider, key)
+        return {"ok": ok, "message": message, **self.settings()}
+
+    def delete_key(self, provider: str) -> dict[str, Any]:
+        from ..models import forget_api_key
+
+        forget_api_key(provider)
+        return self.settings()
+
 
 class Handler(BaseHTTPRequestHandler):
     state: AppState
@@ -192,6 +249,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._error(HTTPStatus.FORBIDDEN, "bad token")
             scope = (parse_qs(parsed.query).get("scope") or ["today"])[0]
             return self._json({"scope": scope, "text": self.state.agenda(scope)})
+        if path == "/api/settings":
+            if not self._authorised():
+                return self._error(HTTPStatus.FORBIDDEN, "bad token")
+            return self._json(self.state.settings())
         return self._error(HTTPStatus.NOT_FOUND, "not found")
 
     def do_POST(self) -> None:  # noqa: N802
@@ -312,6 +373,24 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/skills/reload":
             count = self.state.agent.reload_skills()
             return self._json({"skills": count})
+
+        if path == "/api/settings" and data:
+            mode = str(data.get("mode") or "local").strip()
+            provider = data.get("cloud_provider") or None
+            model = data.get("cloud_model") or None
+            if provider is not None:
+                provider = str(provider).strip() or None
+            if model is not None:
+                model = str(model).strip() or None
+            return self._json(self.state.save_settings(mode, provider, model))
+
+        if path == "/api/settings/key" and data.get("provider") and "key" in data:
+            return self._json(
+                self.state.set_key(str(data["provider"]), str(data["key"]))
+            )
+
+        if path == "/api/settings/key/delete" and data.get("provider"):
+            return self._json(self.state.delete_key(str(data["provider"])))
 
         return self._error(HTTPStatus.NOT_FOUND, "not found")
 

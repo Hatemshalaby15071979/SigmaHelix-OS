@@ -34,6 +34,13 @@ All notable changes to SigmaHelix are recorded here. The format follows
   Tommy proposes the questions for any project in `cloned_repos` by scanning the
   real project on disk; you approve before the task is created. Tasks carry a
   due date and appear in the calendar.
+- **Web Settings view (⚙️).** Choose the model mode — **Local**, **Cloud**, or
+  **Hybrid** — and manage provider API keys from the web UI. Selecting a mode
+  persists `model_mode`/`cloud_provider`/`cloud_model` to `config.yaml` and is
+  applied to the live agent; a restart reloads the same selection automatically.
+  Keys are added, live-verified against the provider, and removed entirely from
+  the OS keyring (never written to config). Unverified or bad keys are reported
+  and never stored.
 - Tasks and notes live in the durable SQLite core. Migration v14 adds
   `pinned`, `display_id` and `recurrence` to tasks and `pinned`/`display_id` to
   notes; existing rows are numbered during the upgrade.
