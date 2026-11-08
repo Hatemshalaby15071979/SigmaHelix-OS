@@ -29,7 +29,7 @@ without a browser.
 | Projects | Auto-discovers the `cloned_repos` folder (works from the source checkout *and* an installed binary) and scans it on every run, reading git state, scoring health, and surfacing a **Run** link for any deployed app, executable, web/dashboard or desktop build |
 | Calendar | Month view built from task occurrences and due dates |
 | Launchers | Named argv profiles per project with a whitelisted environment and no shell |
-| Assistant | **Tommy** — local Ollama first, deterministic keyword fallback, optional cloud providers. Always shows its thinking and token usage. Tommy has a **coding workspace**: ask him to build a webapp/app/site and he scaffolds a runnable project under `cloned_repos` (with a Run link) and edits files, instead of refusing. |
+| Assistant | **Tommy** — local Ollama first, deterministic keyword fallback, optional cloud providers. Always shows its thinking and token usage. Tommy is a real agent with tools: he **visits public URLs and reads them**, **reads/searches/creates/modifies any file in `cloned_repos`**, **assesses every project for production readiness** (readme, tests, CI, container, env template, build, git), **builds runnable projects** (with a Run link), and **writes real PDFs** — instead of refusing. |
 | Skills | Tommy auto-loads a fixed set of skills into every model call (frontend/webapp, UI design, DevOps, prompt engineering, `i-have-adhd` and your personal `Hatem_specific`), so they apply to any model, local or cloud |
 | Reminders | Persisted scheduler, notification inbox, alarm state machine (snooze, dismiss, reschedule) |
 | Audit | Append-only SHA-256 hash chain over every mutation, with verification |

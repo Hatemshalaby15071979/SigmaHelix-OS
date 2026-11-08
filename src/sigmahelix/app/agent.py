@@ -168,7 +168,8 @@ OUTPUT FORMAT:
               reopen_question|show_questions|execute_task|create_note|
               list_notes|edit_note|delete_note|pin_note|unpin_note|
               list_projects|explore|calendar|launch|create_project|
-              file_operations|chat|help>",
+              file_operations|fetch_url|assess_projects|create_document|
+              chat|help>",
    "content": "<needed args, empty if none>",
    "reply": "<short friendly answer to show/spell out for the user>"}
 
@@ -190,8 +191,22 @@ RULES:
 - execute_task: content = "task <id>" — you answer the open questions yourself.
 - create_project: content = the project name/description. You scaffold a runnable
   app there; follow up with file_operations to add or edit files.
-- file_operations: content = JSON {"operation":"create|read|modify",
-  "path":"<relative path in the project>", "content":"<text for create/modify>"}.
+- file_operations: content = JSON {"operation":"list|read|search|create|modify",
+  "path":"<relative path in the workspace>", "content":"<text for create/modify>",
+  "pattern":"<regex for search>", "glob":"<optional file glob>"}. The workspace is
+  the projects directory (cloned_repos); you may read, create and modify ANY file
+  in it. Use "list" to explore, "read" to inspect a file, "search" to grep.
+- fetch_url: content = a public http(s) URL. You CAN visit pages and read their
+  text. Use it for documentation, GitHub pages, raw README files, articles.
+  Never say "I'm not a browser" — call fetch_url. (Pages behind a login wall,
+  like a private LinkedIn profile, may still return only a login page; say so.)
+- assess_projects: content = "" or a project name. Scans every project in the
+  workspace and reports real production-readiness evidence (readme, tests, CI,
+  container, env template, build commands, git state). Use this to answer
+  "which project is production ready?" — never guess or just list names.
+- create_document: content = JSON {"title":"...","sections":[{"heading":"...",
+  "body":"..."}],"filename":"resume.pdf"}. Writes a real PDF into the workspace.
+  Use local READMEs and fetched pages for facts; never invent career details.
 - Decide NOTE vs TASK by what the user wants, not by which words appear:
   * create_task  = something to DO later: a duty, reminder, deadline, errand,
     "remind me…", "remember to…", "call X at 4pm", "review the report Friday",
@@ -338,6 +353,12 @@ class Agent:
         task_route = self._task_build_route(raw)
         if task_route is not None:
             return task_route
+
+        # Concrete tool commands (web, project assessment, documents) are
+        # deterministic too: the user must never hear "I can't" for these.
+        tool_route = self._tool_route(raw)
+        if tool_route is not None:
+            return tool_route
 
         if self.llm_available:
             result = self._llm_roundtrip(raw)
@@ -696,6 +717,12 @@ class Agent:
             return self._handle_create_project(args_text, original_text)
         if action == "web_search":
             return self._handle_web_search(args_text, original_text)
+        if action == "fetch_url":
+            return self._handle_fetch_url(args_text, original_text)
+        if action == "assess_projects":
+            return self._handle_assess_projects(args_text, original_text)
+        if action == "create_document":
+            return self._handle_create_document(args_text, original_text)
         if action == "file_operations":
             return self._handle_file_operations(args_text, original_text)
         if action == "youtube_summary":
@@ -738,6 +765,115 @@ class Agent:
         if has_task and any(w in low for w in ("execute", "work on", "run")):
             return self.execute_task(text)
         return None
+
+    def _tool_route(self, text: str):
+        """Deterministic web / assessment / document commands."""
+        low = (text or "").lower()
+        url = re.search(r"https?://[^\s<>\"']+", text or "")
+        if url and any(
+            word in low
+            for word in (
+                "read",
+                "visit",
+                "open",
+                "fetch",
+                "check",
+                "see",
+                "look",
+                "summar",
+                "analy",
+            )
+        ):
+            return self._handle_fetch_url(url.group(0), text)
+        if (
+            "production ready" in low
+            or "production-readiness" in low
+            or "production readiness" in low
+            or (
+                any(word in low for word in ("assess", "audit", "scan"))
+                and "project" in low
+            )
+        ):
+            return self._handle_assess_projects("", text)
+        if any(word in low for word in ("resume", " cv", "curriculum")) and any(
+            word in low
+            for word in ("create", "make", "build", "generate", "write", "pdf")
+        ):
+            return self._handle_resume(text)
+        if (
+            low.startswith(("list files", "read file", "search for", "grep "))
+            or "read the readme" in low
+        ):
+            return self._handle_file_operations("", text)
+        return None
+
+    def _handle_resume(self, text: str) -> str:
+        """Build a real PDF from public GitHub data and the local READMEs."""
+        import json as _json
+
+        from . import tools
+
+        profile: dict[str, Any] = {}
+        repos: list[dict[str, Any]] = []
+        match = re.search(r"github\.com/([A-Za-z0-9_.-]+)", text)
+        if match:
+            user = match.group(1)
+            page = tools.fetch_url(f"https://api.github.com/users/{user}")
+            if page.get("ok"):
+                try:
+                    profile = _json.loads(page["text"])
+                except _json.JSONDecodeError:
+                    profile = {}
+            listing = tools.fetch_url(
+                f"https://api.github.com/users/{user}/repos?per_page=100&sort=updated"
+            )
+            if listing.get("ok"):
+                try:
+                    repos = _json.loads(listing["text"])
+                except _json.JSONDecodeError:
+                    repos = []
+        rows = self.projects.service.scan_projects()
+        local = tools.assess_all(self._workspace_root(), rows)
+
+        name = str(profile.get("name") or "Hatem Shalaby")
+        lines: list[str] = []
+        if profile.get("bio"):
+            lines.append(str(profile["bio"]))
+        contact = " · ".join(
+            str(value)
+            for value in (
+                profile.get("location"),
+                profile.get("blog"),
+                profile.get("html_url"),
+            )
+            if value
+        )
+        if contact:
+            lines.append(contact)
+        if repos:
+            lines.append("")
+            lines.append("PUBLIC PROJECTS")
+            for repo in repos[:15]:
+                if not isinstance(repo, dict):
+                    continue
+                desc = str(repo.get("description") or "").strip()
+                lang = str(repo.get("language") or "").strip()
+                suffix = f" [{lang}]" if lang else ""
+                lines.append(f"- {repo.get('name')}{suffix}: {desc}")
+        if local:
+            lines.append("")
+            lines.append("LOCAL PROJECTS")
+            for record in local[:15]:
+                desc = record.get("description") or "project in cloned_repos"
+                build = ", ".join(record.get("build_commands") or []) or "n/a"
+                lines.append(f"- {record['name']}: {desc} (build: {build})")
+        target = self._workspace_root() / "resume.pdf"
+        tools.write_pdf(target, f"{name} - Resume", lines)
+        source = "GitHub + local READMEs" if repos else "local READMEs"
+        return (
+            f"📄 Wrote {target} using {source}. "
+            "Add your roles, dates and education and I'll fold them in."
+        )
 
     _BUILD_PATTERN = re.compile(
         r"\b(create|build|make|scaffold|generate|develop)\b.*\b"
@@ -911,48 +1047,160 @@ class Agent:
         except Exception as e:
             return f"⚠️ Web search error: {str(e)[:100]}"
 
-    def _handle_file_operations(self, args_text, original_text):
-        """Read, create or append a file inside the projects directory.
+    def _workspace_root(self):
+        from .paths import projects_dir
 
-        The path comes from a model, so it is untrusted: every operation is
-        confined to the projects root and oversized or binary reads are
-        refused.
+        return projects_dir()
+
+    def _handle_file_operations(self, args_text, original_text):
+        """List, read, search, create or modify files in the workspace.
+
+        The workspace is the projects directory (cloned_repos); every path is
+        confined to it. Arguments come from a model, so they are untrusted.
         """
         import json
 
-        from .paths import projects_dir
-        from .security import confine_to_root, read_text_file
+        from . import tools
 
+        text = (args_text or "").strip()
+        if text.startswith("{"):
+            try:
+                op_data = json.loads(text)
+            except json.JSONDecodeError:
+                return "⚠️ Invalid JSON arguments for file operations"
+        else:
+            op_data = self._parse_file_command(text or original_text)
+        operation = str(op_data.get("operation") or "list")
+        raw_path = str(op_data.get("path") or "")
+        root = self._workspace_root()
+
+        if operation == "list":
+            result = tools.list_files(root, raw_path)
+            if not result.get("ok"):
+                return f"⚠️ {result.get('error')}"
+            lines = [f"📁 {raw_path or '.'}"]
+            for entry in result["entries"]:
+                mark = "📁" if entry["dir"] else "📄"
+                lines.append(f"  {mark} {entry['path']}")
+            return "\n".join(lines) if len(lines) > 1 else "📁 (empty)"
+
+        if operation == "read":
+            result = tools.read_file(root, raw_path)
+            if not result.get("ok"):
+                return f"⚠️ {result.get('error')}"
+            return f"📄 {result['path']}\n{result['text']}"
+
+        if operation == "search":
+            result = tools.search_files(
+                root,
+                str(op_data.get("pattern") or ""),
+                str(op_data.get("glob") or "*"),
+                sub=raw_path,
+            )
+            if not result.get("ok"):
+                return f"⚠️ {result.get('error')}"
+            if not result["hits"]:
+                return "🔍 no matches"
+            return "\n".join(
+                f"{hit['path']}:{hit['line']}: {hit['text']}" for hit in result["hits"]
+            )
+
+        if operation in ("create", "modify"):
+            result = tools.write_file(
+                root,
+                raw_path,
+                str(op_data.get("content") or ""),
+                append=operation == "modify",
+            )
+            if not result.get("ok"):
+                return f"⚠️ {result.get('error')}"
+            verb = "created" if operation == "create" else "modified"
+            return f"✏️ File {verb}: {result['path']}"
+
+        return f"⚠️ Unknown operation: {operation}"
+
+    @staticmethod
+    def _parse_file_command(text: str) -> dict[str, Any]:
+        """Turn 'list files in X', 'read X', 'search for Y in projects' into args."""
+        low = text.lower()
+        if low.startswith("search") or "search for" in low or "grep" in low:
+            match = re.search(r"(?:search(?:\s+for)?|grep)\s+(.+)", text, re.I)
+            rest = match.group(1).strip() if match else ""
+            sub = ""
+            in_match = re.search(r"\s+in\s+(.+)$", rest, re.I)
+            if in_match:
+                sub = in_match.group(1).strip()
+                rest = rest[: in_match.start()].strip()
+            return {"operation": "search", "pattern": rest, "path": sub}
+        if low.startswith("read") or low.startswith("open"):
+            match = re.search(r"^(?:read|open)\s+(?:file\s+)?(.+)", text, re.I)
+            return {
+                "operation": "read",
+                "path": match.group(1).strip() if match else "",
+            }
+        match = re.search(r"(?:in|under|inside)\s+(.+)", text, re.I)
+        return {"operation": "list", "path": match.group(1).strip() if match else ""}
+
+    def _handle_fetch_url(self, args_text, original_text):
+        """Visit a URL and return readable text — no more 'I'm not a browser'."""
+        from . import tools
+
+        url = (args_text or "").strip()
+        if not url:
+            match = re.search(r"https?://[^\s<>\"']+", original_text or "")
+            url = match.group(0) if match else ""
+        result = tools.fetch_url(url)
+        if not result.get("ok") and not result.get("text"):
+            return f"⚠️ Could not read {url or 'that URL'}: {result.get('error')}"
+        header = f"🌐 {result.get('url')}"
+        if result.get("status"):
+            header += f" (HTTP {result['status']})"
+        body = result.get("text") or "(no readable text)"
+        if result.get("truncated"):
+            body += "\n…(truncated)"
+        return f"{header}\n{body}"
+
+    def _handle_assess_projects(self, args_text, original_text):
+        """Scan every project and report real production-readiness evidence."""
+        from . import tools
+
+        rows = self.projects.service.scan_projects()
+        records = tools.assess_all(self._workspace_root(), rows)
+        return tools.format_assessment(records)
+
+    def _handle_create_document(self, args_text, original_text):
+        """Write a real PDF document into the workspace."""
+        import json
+
+        from . import tools
+
+        text = (args_text or "").strip()
+        if not text.startswith("{"):
+            return (
+                "Give me the document as JSON: "
+                '{"title":"...","sections":[{"heading":"...","body":"..."}],'
+                '"filename":"resume.pdf"}'
+            )
         try:
-            op_data = json.loads(args_text) if args_text else {}
-            operation = op_data.get("operation", "create")
-            raw_path = op_data.get("path", "")
-            content = op_data.get("content", "")
-            path = confine_to_root(projects_dir(), raw_path)
-
-            if operation == "create":
-                path.parent.mkdir(parents=True, exist_ok=True)
-                path.write_text(content or "", encoding="utf-8")
-                return f"📄 File created: {path}"
-
-            if operation == "read":
-                if not path.is_file():
-                    return f"⚠️ File not found: {path}"
-                return f"📄 File contents:\n{read_text_file(path)}"
-
-            if operation == "modify":
-                if not path.is_file():
-                    return f"⚠️ File not found: {path}"
-                with path.open("a", encoding="utf-8") as handle:
-                    handle.write(content or "")
-                return f"✏️ File modified: {path}"
-
-            return f"⚠️ Unknown operation: {operation}"
-
+            spec = json.loads(text)
         except json.JSONDecodeError:
-            return "⚠️ Invalid JSON arguments for file operations"
-        except (OSError, ValueError) as exc:
-            return f"⚠️ File operations refused: {str(exc)[:120]}"
+            return "⚠️ Invalid JSON for the document"
+        title = str(spec.get("title") or "Document")
+        filename = str(spec.get("filename") or "document.pdf")
+        if not filename.lower().endswith(".pdf"):
+            filename += ".pdf"
+        body: list[str] = []
+        for section in spec.get("sections") or []:
+            if not isinstance(section, dict):
+                continue
+            heading = str(section.get("heading") or "").strip()
+            if heading:
+                body.append("")
+                body.append(heading.upper())
+            body.extend(str(section.get("body") or "").splitlines())
+        target = self._workspace_root() / filename
+        tools.write_pdf(target, title, body)
+        return f"📄 Wrote {target}"
 
     def _handle_youtube_summary(self, args_text, original_text):
         """Handle YouTube summary skill."""

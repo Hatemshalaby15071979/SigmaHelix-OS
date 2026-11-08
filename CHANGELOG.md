@@ -52,6 +52,15 @@ All notable changes to SigmaHelix are recorded here. The format follows
   **Run** link) and can edit its files via file operations — instead of
   apologising that he cannot do it here. If a model reply refuses a build
   request, the refusal is replaced by an actual scaffold.
+- **Real agent tools (`app/tools.py`).** Tommy can now `fetch_url` any public
+  page and read its text (SSRF-guarded: localhost/private ranges are refused),
+  `list`/`read`/`search`/`create`/`modify` any file inside `cloned_repos`
+  (path-confined), assess every project's production readiness from on-disk
+  evidence (README, tests, CI, container, healthcheck, env template, build
+  commands, git state), and write valid multi-page PDFs with the standard
+  library. These routes are deterministic, so "scan my projects", "which project
+  is production ready?", "read <url>" and "create a resume PDF" work even when
+  the model would otherwise answer "I can't".
 - Tasks and notes live in the durable SQLite core. Migration v14 adds
   `pinned`, `display_id` and `recurrence` to tasks and `pinned`/`display_id` to
   notes; existing rows are numbered during the upgrade.

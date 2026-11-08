@@ -102,5 +102,10 @@ migration tests (`tests/core/test_migrations.py`) and extend
 - Tommy's question-task actions and `create_project` are deterministic and must
   keep working without a model. A build request must scaffold real files — never
   answer it with a refusal.
+- `app/tools.py` holds the agent's real tools (`fetch_url`, workspace file ops,
+  project readiness, PDF). Keep them deterministic-routed in the agent: a URL
+  read, a project scan, or a document request must never degrade to "I can't".
+  `fetch_url` must keep refusing private/loopback hosts (SSRF guard), and file
+  operations must stay confined to `cloned_repos`.
 - Run the gate before declaring work done; if a test fails, fix the code or the
   test's stale assumption, but never delete or disable tests to make it pass.
