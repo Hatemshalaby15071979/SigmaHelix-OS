@@ -313,7 +313,7 @@ def _scripted_cloud(agent, replies):
     """Make the cloud backend return the given JSON payloads in order."""
     calls: list[str] = []
 
-    def fake_cloud(messages):
+    def fake_cloud(messages, max_tokens=None):
         calls.append(messages[-1]["content"][:120])
         payload = replies[min(len(calls) - 1, len(replies) - 1)]
         return payload, None
@@ -375,7 +375,7 @@ def test_loop_runs_tools_until_the_model_answers(cloud_agent, workspace):
     assert "a + b + 1" in (workspace / "demo" / "src" / "calc.py").read_text()
     # and the loop reported its steps
     steps = cloud_agent.last_trace.get("steps") or []
-    assert any(step.startswith("edit_file") for step in steps)
+    assert any(step["action"] == "edit_file" for step in steps)
 
 
 def test_loop_is_off_outside_cloud_mode(cloud_agent, workspace):

@@ -69,7 +69,16 @@ def test_local_trace_tolerates_a_model_without_thinking(offline_agent, monkeypat
 
 
 def test_cloud_trace_records_usage_and_reasoning(offline_agent, monkeypatch):
-    def fake_cloud(provider, model, key, system, timeout=30, messages=None, trace=None):
+    def fake_cloud(
+        provider,
+        model,
+        key,
+        system,
+        timeout=30,
+        messages=None,
+        trace=None,
+        max_tokens=4096,
+    ):
         if trace is not None:
             trace.update(
                 provider=provider,

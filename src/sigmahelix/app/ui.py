@@ -929,6 +929,24 @@ class SigmaHelixApp:
         thinking = (trace.get("thinking") or "").strip()
         if thinking:
             self.chat_box.insert("end", f"💭 {thinking}\n", "trace_dim")
+        for plan in trace.get("plans") or []:
+            self.chat_box.insert("end", f"🧭 {plan}\n", "trace_dim")
+        steps = trace.get("steps") or []
+        if steps:
+            self.chat_box.insert(
+                "end", f"reasoning ({len(steps)} step(s)):\n", "trace_dim"
+            )
+            for step in steps:
+                mark = "✓" if step.get("ok") else "✗"
+                args = f" ({step['args']})" if step.get("args") else ""
+                why = f" — {step['plan']}" if step.get("plan") else ""
+                self.chat_box.insert(
+                    "end",
+                    f"  {step.get('seq')}. {step.get('action')}{args}{why} "
+                    f"[{mark} · {step.get('duration_ms', 0)}ms] "
+                    f"{step.get('summary') or ''}\n",
+                    "trace_dim",
+                )
         prompt_tokens = trace.get("prompt_tokens") or 0
         completion_tokens = trace.get("completion_tokens") or 0
         if prompt_tokens or completion_tokens:
@@ -939,6 +957,10 @@ class SigmaHelixApp:
                 f"   [{model} · {prompt_tokens} in / {completion_tokens} out "
                 f"/ {total} tokens]\n",
                 "trace_dim",
+            )
+        if trace.get("truncated"):
+            self.chat_box.insert(
+                "end", "   ⚠️ output truncated (token limit)\n", "trace_dim"
             )
 
     def _listen_to_reply(self):

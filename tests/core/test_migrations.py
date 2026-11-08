@@ -218,3 +218,29 @@ def test_health_migration_backfills_old_snapshots_and_batch_membership(tmp_path)
     assert snapshot["batch_id"]
     assert snapshot["health_score"] == 50
     assert batch_count == 1
+
+
+def test_metacognition_ledger_migration_creates_and_drops_its_tables(tmp_path):
+    from sigmahelix.core.storage.backup import _REQUIRED_TABLES
+
+    database = Database(tmp_path / "ledger.db")
+    runner = MigrationRunner(database)
+    assert runner.upgrade() == 16
+
+    objects = _application_objects(database)
+    for table in (
+        "agent_turns",
+        "agent_steps",
+        "agent_feedback",
+        "agent_recommendations",
+    ):
+        assert ("table", table) in objects
+        assert table in _REQUIRED_TABLES[16]
+        assert table in _REQUIRED_TABLES[runner.latest_version]
+
+    # an empty ledger downgrades cleanly
+    assert runner.downgrade(15) == 15
+    objects = _application_objects(database)
+    assert ("table", "agent_turns") not in objects
+    assert ("table", "agent_steps") not in objects
+    assert ("table", "task_questions") in objects

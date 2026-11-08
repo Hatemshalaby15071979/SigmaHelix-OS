@@ -1143,7 +1143,14 @@ PROBE_MODEL = {
 
 
 def try_cloud_query(
-    provider, model, api_key, user_text, timeout=30, messages=None, trace=None
+    provider,
+    model,
+    api_key,
+    user_text,
+    timeout=30,
+    messages=None,
+    trace=None,
+    max_tokens=4096,
 ):
     """Try a cloud API query and return (reply, error).
 
@@ -1154,8 +1161,10 @@ def try_cloud_query(
     Pass ``messages`` (a full system/history/user list) to keep the
     conversation structured; ``user_text`` is then only a fallback.
 
-    Pass a dict as ``trace`` to receive the model's thinking text and token
-    usage for the call, so the UI can show what was spent.
+    Pass a dict as ``trace`` to receive the model's thinking text, token usage,
+    and truncation state for the call, so the UI can show what was spent.
+    ``max_tokens`` is the reply budget; a response cut off by it is reported as
+    ``trace["truncated"] = True`` and must be retried, never shown raw.
     """
     url = PROVIDER_ENDPOINTS.get(provider)
     if not url:
@@ -1172,7 +1181,7 @@ def try_cloud_query(
         "model": model,
         "messages": messages or [{"role": "user", "content": user_text}],
         "temperature": 0.2,
-        "max_tokens": 500,
+        "max_tokens": max_tokens,
     }
     request = urllib.request.Request(
         url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST"
@@ -1204,6 +1213,7 @@ def try_cloud_query(
         prompt_tokens = int(usage.get("prompt_tokens") or 0)
         completion_tokens = int(usage.get("completion_tokens") or 0)
         reasoning = message.get("reasoning_content") or message.get("reasoning") or ""
+        finish_reason = str(data["choices"][0].get("finish_reason") or "")
         trace.update(
             provider=provider,
             model=model,
@@ -1214,6 +1224,8 @@ def try_cloud_query(
                 usage.get("total_tokens") or prompt_tokens + completion_tokens
             ),
             duration_ms=0,
+            finish_reason=finish_reason,
+            truncated=finish_reason == "length",
         )
     return message.get("content"), None
 
@@ -1225,7 +1237,12 @@ def test_api_key(provider, api_key, timeout=12):
     key = str(api_key).strip()
     model = PROVIDER_MODEL_DEFAULT(provider)
     _, err = try_cloud_query(
-        provider, model, key, "Reply with the single word: ok", timeout=timeout
+        provider,
+        model,
+        key,
+        "Reply with the single word: ok",
+        timeout=timeout,
+        max_tokens=32,
     )
     if err:
         return False, err

@@ -24,7 +24,7 @@ RESET = "\033[0m"
 
 
 def _trace_lines(agent):
-    """Thinking and token spend for the turn that just finished."""
+    """Thinking, reasoning steps and token spend for the turn that finished."""
     trace = getattr(agent, "last_trace", None) or {}
     if not trace:
         return []
@@ -32,6 +32,20 @@ def _trace_lines(agent):
     thinking = (trace.get("thinking") or "").strip()
     if thinking:
         lines.append(f"{DIM}  thinking: {thinking}{RESET}")
+    for plan in trace.get("plans") or []:
+        lines.append(f"{DIM}  plan: {plan}{RESET}")
+    steps = trace.get("steps") or []
+    if steps:
+        lines.append(f"{DIM}  reasoning ({len(steps)} step(s)):{RESET}")
+        for step in steps:
+            mark = "✓" if step.get("ok") else "✗"
+            args = f" ({step['args']})" if step.get("args") else ""
+            why = f" — {step['plan']}" if step.get("plan") else ""
+            lines.append(
+                f"{DIM}    {step.get('seq')}. {step.get('action')}{args}{why} "
+                f"[{mark} · {step.get('duration_ms', 0)}ms] "
+                f"{step.get('summary') or ''}{RESET}"
+            )
     prompt_tokens = trace.get("prompt_tokens") or 0
     completion_tokens = trace.get("completion_tokens") or 0
     if prompt_tokens or completion_tokens:
@@ -40,6 +54,8 @@ def _trace_lines(agent):
             f"{DIM}  [{model} · {prompt_tokens} in / {completion_tokens} out "
             f"/ {prompt_tokens + completion_tokens} tokens]{RESET}"
         )
+    if trace.get("truncated"):
+        lines.append(f"{DIM}  ⚠️ output truncated (token limit){RESET}")
     return lines
 
 

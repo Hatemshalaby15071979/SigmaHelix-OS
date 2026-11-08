@@ -695,6 +695,105 @@ DROP TABLE IF EXISTS task_questions;
 """,
         rollback_requires_empty=("task_questions",),
     ),
+    Migration(
+        version=16,
+        name="agent_metacognition_ledger_v16",
+        up_sql="""
+CREATE TABLE agent_turns (
+    id TEXT NOT NULL,
+    tenant_id TEXT NOT NULL CHECK(length(trim(tenant_id)) > 0),
+    session_id TEXT NOT NULL,
+    turn_index INTEGER NOT NULL CHECK(turn_index >= 0),
+    started_at TEXT NOT NULL,
+    ended_at TEXT,
+    user_text TEXT NOT NULL,
+    route TEXT NOT NULL,
+    model_mode TEXT NOT NULL,
+    provider TEXT,
+    model TEXT,
+    plan TEXT NOT NULL DEFAULT '',
+    reply TEXT NOT NULL DEFAULT '',
+    outcome TEXT NOT NULL DEFAULT 'unknown'
+        CHECK(outcome IN ('unknown', 'answered', 'acted', 'blocked', 'failed', 'refused')),
+    error TEXT,
+    prompt_tokens INTEGER NOT NULL DEFAULT 0,
+    completion_tokens INTEGER NOT NULL DEFAULT 0,
+    total_tokens INTEGER NOT NULL DEFAULT 0,
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    truncated INTEGER NOT NULL DEFAULT 0 CHECK(truncated IN (0, 1)),
+    evidence_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(evidence_json)),
+    proof_hash TEXT NOT NULL CHECK(length(proof_hash) = 64),
+    PRIMARY KEY (id),
+    UNIQUE (tenant_id, id),
+    UNIQUE (tenant_id, session_id, turn_index)
+);
+
+CREATE INDEX idx_agent_turns_time ON agent_turns(tenant_id, started_at);
+CREATE INDEX idx_agent_turns_outcome ON agent_turns(tenant_id, outcome, started_at);
+
+CREATE TABLE agent_steps (
+    id TEXT NOT NULL,
+    tenant_id TEXT NOT NULL,
+    turn_id TEXT NOT NULL,
+    seq INTEGER NOT NULL CHECK(seq > 0),
+    kind TEXT NOT NULL CHECK(kind IN
+        ('plan', 'model_call', 'tool_call', 'tool_result', 'decision', 'final', 'error')),
+    action TEXT NOT NULL DEFAULT '',
+    plan TEXT NOT NULL DEFAULT '',
+    args TEXT NOT NULL DEFAULT '',
+    summary TEXT NOT NULL DEFAULT '',
+    ok INTEGER NOT NULL DEFAULT 1 CHECK(ok IN (0, 1)),
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    payload_json TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(payload_json)),
+    occurred_at TEXT NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE (tenant_id, turn_id, seq),
+    FOREIGN KEY (tenant_id, turn_id) REFERENCES agent_turns(tenant_id, id) ON DELETE CASCADE
+);
+
+CREATE TABLE agent_feedback (
+    id TEXT NOT NULL,
+    tenant_id TEXT NOT NULL,
+    turn_id TEXT NOT NULL,
+    verdict TEXT NOT NULL CHECK(verdict IN ('good', 'pushback')),
+    reason TEXT NOT NULL DEFAULT '',
+    source TEXT NOT NULL DEFAULT 'user' CHECK(source IN ('user', 'heuristic')),
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (id),
+    FOREIGN KEY (tenant_id, turn_id) REFERENCES agent_turns(tenant_id, id) ON DELETE CASCADE
+);
+
+CREATE TABLE agent_recommendations (
+    id TEXT NOT NULL,
+    tenant_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    period TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK(kind IN
+        ('new_plugin', 'update_plugin', 'delete_plugin', 'skill', 'prompt', 'tool', 'ux', 'config')),
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    evidence_json TEXT NOT NULL CHECK(json_valid(evidence_json)),
+    status TEXT NOT NULL DEFAULT 'proposed'
+        CHECK(status IN ('proposed', 'approved', 'rejected', 'applied')),
+    decided_at TEXT,
+    decision_note TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (id),
+    UNIQUE (tenant_id, id)
+);
+""",
+        down_sql="""
+DROP TABLE IF EXISTS agent_recommendations;
+DROP TABLE IF EXISTS agent_feedback;
+DROP TABLE IF EXISTS agent_steps;
+DROP TABLE IF EXISTS agent_turns;
+""",
+        rollback_requires_empty=(
+            "agent_turns",
+            "agent_steps",
+            "agent_feedback",
+            "agent_recommendations",
+        ),
+    ),
 )
 
 

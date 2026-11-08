@@ -17,11 +17,16 @@ import json
 import os
 import re
 import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from .metacognition import Ledger
 
 from .managers import (
     CalendarManager,
@@ -259,6 +264,9 @@ class Agent:
         self.voice = None
         self.host = OLLAMA_HOSTS[0]
         self.history = []  # (role, content) chat history, last 8 turns
+        # One session per process; the durable ledger remembers across restarts.
+        self.session_id = str(uuid.uuid4())
+        self._ledger_obj: Ledger | None = None
         self._llm_lock = threading.Lock()
         self.llm_available = self._check_llm(timeout=1.5)
         # Best local model first (not the hardcoded 1B default)
@@ -285,8 +293,11 @@ class Agent:
                 self.model_kind = saved.model_mode
             self.cloud_provider = saved.cloud_provider
             self.cloud_model = saved.cloud_model
+            self.cloud_max_tokens = saved.cloud_max_tokens
         except Exception:  # noqa: BLE001 - fall back to in-memory defaults
             pass
+        if not getattr(self, "cloud_max_tokens", None):
+            self.cloud_max_tokens = 4096
         self.injected_skills = {}  # Store user-injected capability prompts
         # Operating instructions that follow every model call, local or cloud.
         self.skills = SkillLibrary()
@@ -360,6 +371,8 @@ class Agent:
             "  failing code, edit it, run the tests again.\n"
             "- Use only the ENABLED TOOLS listed above; their arguments are\n"
             "  given there.\n"
+            '- You may add "plan":"<one line: why this action, what you expect>"\n'
+            "  to any action; it is shown to the user as your reasoning trail.\n"
             "- Your workspace root is given above. Absolute paths inside it are\n"
             "  valid for edit_file/file_operations — never refuse them as\n"
             "  'outside my workspace'. Resolve project names yourself.\n"
@@ -371,9 +384,29 @@ class Agent:
             "- Never claim a fix you did not verify with a test run."
         )
 
+    @property
+    def ledger(self) -> Ledger:
+        """The metacognition ledger — lazily created, durable, local."""
+        if self._ledger_obj is None:
+            from ..core.config import load_settings
+            from ..core.storage.database import Database
+            from .metacognition import Ledger
+
+            database = Database(load_settings().database_path)
+            database.initialize()
+            self._ledger_obj = Ledger(database)
+        return self._ledger_obj
+
     def _build_messages(self, user_text):
         messages = [{"role": "system", "content": self.system_prompt()}]
-        for role, content in self.history[-8:]:
+        history = self.history
+        if not history:
+            # After a restart the in-memory list is empty; the ledger remembers.
+            try:
+                history = self.ledger.recent_conversation(limit=12)
+            except Exception:  # noqa: BLE001 - no DB must never break a prompt
+                history = []
+        for role, content in history[-8:] if self.history else history:
             messages.append({"role": role, "content": content})
         messages.append({"role": "user", "content": user_text})
         return messages
@@ -391,43 +424,135 @@ class Agent:
         return self.voice
 
     def process_command(self, text):
-        """Main entry: user text -> agent action + reply string."""
+        """Main entry: user text -> agent action + reply string.
+
+        Every turn is recorded in the metacognition ledger, including failures:
+        the reply, the route that produced it, the reasoning steps and the cost.
+        """
         if not text or not text.strip():
             return "Please say something or enter a command."
         raw = text.strip()
         text = raw.lower()
         self.last_trace = {}  # every turn reports its own thinking and spend
+        turn_id, started = self._open_turn(raw)
+        route = "keyword"
+        reply = ""
+        error: str | None = None
+        try:
+            # Slash-styled direct commands bypass the LLM for speed/precision
+            direct = self._direct_route(text)
+            if direct is not None:
+                route = "direct"
+                reply = direct
+                return reply
 
-        # Slash-styled direct commands bypass the LLM for speed/precision
-        direct = self._direct_route(text)
-        if direct is not None:
-            return direct
+            # Question-driven task commands are deterministic: they must never
+            # depend on the model remembering that it is allowed to do them.
+            task_route = self._task_build_route(raw)
+            if task_route is not None:
+                route = "task"
+                reply = task_route
+                return reply
 
-        # Question-driven task commands are deterministic: they must never
-        # depend on the model remembering that it is allowed to do them.
-        task_route = self._task_build_route(raw)
-        if task_route is not None:
-            return task_route
+            # Concrete tool commands (web, project assessment, documents) are
+            # deterministic too: the user must never hear "I can't" for these.
+            tool_route = self._tool_route(raw)
+            if tool_route is not None:
+                route = "tool"
+                reply = tool_route
+                return reply
 
-        # Concrete tool commands (web, project assessment, documents) are
-        # deterministic too: the user must never hear "I can't" for these.
-        tool_route = self._tool_route(raw)
-        if tool_route is not None:
-            return tool_route
+            if self.llm_available:
+                result = self._llm_roundtrip(raw)
+                if result is not None:
+                    # A refusal is never acceptable when the user asked us to
+                    # build: scaffold the project for real instead.
+                    if self._looks_like_build(raw) and self._is_refusal(result):
+                        route = "tool"
+                        if not self.plugins.is_enabled("projects"):
+                            reply = self.plugins.off_message("projects")
+                            return reply
+                        reply = self._handle_create_project("", raw)
+                        return reply
+                    route = "loop" if self._loop_enabled() else "llm"
+                    reply = result
+                    return result
 
-        if self.llm_available:
-            result = self._llm_roundtrip(raw)
-            if result is not None:
-                # A refusal is never acceptable when the user asked us to build:
-                # scaffold the project for real instead of apologising.
-                if self._looks_like_build(raw) and self._is_refusal(result):
-                    if not self.plugins.is_enabled("projects"):
-                        return self.plugins.off_message("projects")
-                    return self._handle_create_project("", raw)
-                return result
+            # LLM unavailable/failed -> deterministic router
+            reply = self._keyword_route(raw) if direct is None else direct
+            return reply
+        except Exception as exc:
+            error = f"{type(exc).__name__}: {exc}"
+            raise
+        finally:
+            self._close_turn(turn_id, started, route, reply, error)
 
-        # LLM unavailable/failed -> deterministic router
-        return self._keyword_route(raw) if direct is None else direct
+    # ---- metacognition: record every turn -------------------------------
+    def _open_turn(self, user_text: str):
+        """Start a ledger row; recording must never break a chat turn."""
+        try:
+            return (
+                self.ledger.open_turn(
+                    self.session_id, user_text, "pending", self.model_kind
+                ),
+                time.perf_counter(),
+            )
+        except Exception:  # noqa: BLE001 - ledger is optional, chat is not
+            return None, None
+
+    def _close_turn(self, turn_id, started, route, reply, error) -> None:
+        """Write steps + outcome + cost; anchor the proof in the audit chain."""
+        if not turn_id:
+            return
+        try:
+            trace = self.last_trace or {}
+            steps = trace.get("steps") or []
+            for step in steps:
+                self.ledger.add_step(
+                    turn_id,
+                    "tool_call",
+                    action=str(step.get("action") or ""),
+                    plan=str(step.get("plan") or ""),
+                    args=str(step.get("args") or ""),
+                    summary=str(step.get("summary") or ""),
+                    ok=bool(step.get("ok")),
+                    duration_ms=int(step.get("duration_ms") or 0),
+                )
+            self.ledger.close_turn(
+                turn_id,
+                reply=str(reply or ""),
+                outcome=self._outcome_for(reply, steps, error),
+                route=route,
+                error=error,
+                plan=" | ".join(trace.get("plans") or []),
+                provider=trace.get("provider"),
+                model=trace.get("model"),
+                tokens=(
+                    int(trace.get("prompt_tokens") or 0),
+                    int(trace.get("completion_tokens") or 0),
+                    int(trace.get("total_tokens") or 0),
+                ),
+                duration_ms=(
+                    int((time.perf_counter() - started) * 1000) if started else 0
+                ),
+                truncated=bool(trace.get("truncated")),
+                evidence=list(trace.get("evidence") or []),
+            )
+        except Exception:  # noqa: BLE001 - the ledger must never break a reply
+            pass
+
+    @staticmethod
+    def _outcome_for(reply, steps, error) -> str:
+        if error:
+            return "failed"
+        text = str(reply or "")
+        if text.startswith("❌"):
+            return "refused"
+        if text.startswith("⚠️"):
+            return "blocked"
+        if any(step.get("ok") for step in steps):
+            return "acted"
+        return "answered"
 
     def say_reply(self, text):
         """Speak a reply through TTS — ONLY called on explicit user action
@@ -551,6 +676,7 @@ class Agent:
             message = out.get("message") or {}
             prompt_tokens = int(out.get("prompt_eval_count") or 0)
             completion_tokens = int(out.get("eval_count") or 0)
+            finish_reason = str(out.get("done_reason") or "")
             self.last_trace = {
                 "provider": "local",
                 "model": name,
@@ -559,11 +685,13 @@ class Agent:
                 "completion_tokens": completion_tokens,
                 "total_tokens": prompt_tokens + completion_tokens,
                 "duration_ms": int((out.get("total_duration") or 0) / 1_000_000),
+                "finish_reason": finish_reason,
+                "truncated": finish_reason == "length",
             }
             return (message.get("content") or "").strip()
         raise last_err or RuntimeError("no local model could answer")
 
-    def _cloud_chat(self, messages, timeout=30):
+    def _cloud_chat(self, messages, timeout=30, max_tokens=None):
         """Ask the active cloud provider. Returns (reply, error)."""
         try:
             from .models import (
@@ -612,6 +740,7 @@ class Agent:
                 timeout=timeout,
                 messages=messages,
                 trace=trace,
+                max_tokens=max_tokens or self.cloud_max_tokens,
             )
             if reply:
                 self.last_trace = {**self.last_trace, **trace}
@@ -633,10 +762,18 @@ class Agent:
         """The multi-step loop runs in cloud mode with the code tools on."""
         return self.model_kind == "cloud" and self.plugins.is_enabled("code")
 
-    def _next_model_reply(self, messages: list[dict[str, Any]]) -> str:
+    #: Actions whose payloads routinely need a large reply budget.
+    _HEAVY_ACTIONS = ("file_operations", "edit_file", "run_command", "audit_repo")
+
+    #: The reply budget used when a truncated call is retried for a heavy action.
+    _HEAVY_BUDGET = 8192
+
+    def _next_model_reply(
+        self, messages: list[dict[str, Any]], max_tokens: int | None = None
+    ) -> str:
         """One model call through the configured backend."""
         if self.model_kind in ("cloud", "hybrid"):
-            reply, _ = self._cloud_chat(messages)
+            reply, _ = self._cloud_chat(messages, max_tokens=max_tokens)
             if reply:
                 return str(reply)
             if self.model_kind == "cloud":
@@ -644,17 +781,91 @@ class Agent:
                 return ""
         return str(self._ollama_chat(messages) or "")
 
+    @staticmethod
+    def _looks_like_action(text: str) -> bool:
+        """True when model output is a tool call, not a prose answer."""
+        stripped = (text or "").strip()
+        if not stripped:
+            return False
+        if stripped.startswith("{") or stripped.startswith("```"):
+            return '"action"' in stripped
+        return False
+
+    def _retry_budget_for(self, partial: str) -> int:
+        """The budget for retrying a truncated call: bigger for heavy actions."""
+        match = re.search(r'"action"\s*:\s*"(\w+)"', partial or "")
+        if match and match.group(1) in self._HEAVY_ACTIONS:
+            return self._HEAVY_BUDGET
+        return min(self.cloud_max_tokens * 2, 16384)
+
+    # Success words that must be backed by a real tool result this turn.
+    _CLAIM_NEEDS = (
+        (
+            re.compile(r"\b(created|wrote|written|edited|patched|added)\b", re.I),
+            ("file_operations", "edit_file"),
+        ),
+        (
+            re.compile(r"\b(fixed|passing|passes|green|solved)\b", re.I),
+            ("run_tests",),
+        ),
+    )
+
+    def _unverified_claim(self, reply: str, steps: list[dict[str, Any]]) -> str:
+        """The first success claim in ``reply`` no tool result this turn proves."""
+        if re.search(r"\bcommitted\b", reply or "", re.I) and not any(
+            s["action"] == "run_command"
+            and "git commit" in str(s.get("args") or "").lower()
+            and s["ok"]
+            for s in steps
+        ):
+            return "committed"
+        for pattern, needed in self._CLAIM_NEEDS:
+            match = pattern.search(reply or "")
+            if not match:
+                continue
+            if any(s["action"] in needed and s["ok"] for s in steps):
+                continue
+            return match.group(0).lower()
+        if re.search(r"\b100\b", reply or "") and not any(s["ok"] for s in steps):
+            return "100"
+        return ""
+
     def _agent_loop(self, messages: list[dict[str, Any]], user_text: str) -> str:
         """Let the model use tools until it can answer with evidence.
 
         Every tool result is fed back as the next turn, so a request like
         "audit this repo, run its tests and fix what fails" becomes a real
-        multi-step session instead of one optimistic reply.
+        multi-step session instead of one optimistic reply. Raw model JSON is
+        never shown: a truncated or malformed tool call is retried or reported.
         """
-        steps: list[str] = []
+        steps: list[dict[str, Any]] = []
         observation = ""
+        retried_truncation = False
+        corrected_claims = False
+        malformed = 0
         for _ in range(self.MAX_AGENT_STEPS):
             content = self._next_model_reply(messages)
+
+            # A reply cut off by the token budget is not an answer — retry once
+            # with more room (heavy payloads get the heavy budget).
+            if self.last_trace.get("truncated"):
+                if retried_truncation:
+                    self.last_trace["steps"] = steps
+                    return (
+                        "⚠️ The tool call was cut off by the token limit twice "
+                        f"(budget {self.cloud_max_tokens}). Nothing was executed. "
+                        "Raise cloud_max_tokens in settings and ask me to retry."
+                    )
+                retried_truncation = True
+                budget = self._retry_budget_for(content)
+                self.last_trace.pop("truncated", None)
+                self.last_trace.pop("finish_reason", None)
+                content = self._next_model_reply(messages, max_tokens=budget)
+
+            if not self.last_trace.get("truncated"):
+                # This event is resolved; a later step gets its own retry.
+                retried_truncation = False
+
             if not content:
                 if observation:
                     break
@@ -662,23 +873,82 @@ class Agent:
 
             data = self._parse_json(content)
             if data is None:
+                if self._looks_like_action(content):
+                    # A tool call that did not parse is an error, not an answer.
+                    malformed += 1
+                    if malformed >= 2:
+                        self.last_trace["steps"] = steps
+                        return (
+                            "⚠️ The model's tool call was malformed JSON and could "
+                            "not be executed. Nothing was changed. Please ask again."
+                        )
+                    messages.append({"role": "assistant", "content": content[:1500]})
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                "Your last reply was a malformed tool call "
+                                "(invalid JSON). Reply with ONE valid JSON object."
+                            ),
+                        }
+                    )
+                    continue
                 # The model answered in prose — that is the final answer.
+                self.last_trace["steps"] = steps
+                self._remember("user", user_text)
+                self._remember("assistant", content)
                 return f"🤖 {content}"
 
             action = (data.get("action") or "help").strip()
             args_text = (data.get("content") or "").strip()
             reply = (data.get("reply") or "").strip()
+            plan = (data.get("plan") or "").strip()
+            if plan:
+                self.last_trace.setdefault("plans", []).append(plan)
 
             if action in self._FINAL_ACTIONS:
+                # A claim is not evidence: success words need a real tool
+                # result this turn. Ask once; flag if the answer is unchanged.
+                claim = self._unverified_claim(reply, steps)
+                if claim and not corrected_claims:
+                    corrected_claims = True
+                    messages.append({"role": "assistant", "content": content[:1500]})
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": (
+                                f"Your answer claims '{claim}' but no tool result "
+                                "this turn proves it. Call the tool and show the "
+                                "result, or remove the claim."
+                            ),
+                        }
+                    )
+                    continue
+                if claim:
+                    reply = f"⚠️ unverified claim: {claim}\n\n{reply}"
+                if data.get("evidence"):
+                    self.last_trace["evidence"] = list(data.get("evidence") or [])
                 self.last_trace["steps"] = steps
                 self._remember("user", user_text)
                 self._remember("assistant", reply or observation)
                 return reply or observation or "Done."
 
+            started = time.perf_counter()
             executed = self._execute(action, args_text, user_text)
+            duration_ms = int((time.perf_counter() - started) * 1000)
             observation = executed
             steps.append(
-                f"{action}: {executed.splitlines()[0][:120] if executed else 'no output'}"
+                {
+                    "seq": len(steps) + 1,
+                    "action": action,
+                    "plan": plan,
+                    "args": args_text[:200],
+                    "ok": bool(executed) and not executed.startswith(("⚠️", "❌")),
+                    "summary": (
+                        executed.splitlines()[0][:120] if executed else "no output"
+                    ),
+                    "duration_ms": duration_ms,
+                }
             )
             messages.append({"role": "assistant", "content": content[:1500]})
             messages.append(
@@ -688,7 +958,8 @@ class Agent:
                         f"TOOL RESULT [{action}]:\n"
                         f"{executed[: self.MAX_OBSERVATION_CHARS]}\n\n"
                         "Continue with the next step using a tool, or answer with "
-                        '{"action":"final","content":"","reply":"<the answer>"}.'
+                        '{"action":"final","content":"","reply":"<the answer>",'
+                        '"evidence":["<tool:result you rely on>"]}.'
                     ),
                 }
             )
@@ -728,8 +999,29 @@ class Agent:
                 if not content:
                     return self._keyword_route(user_text)
 
+                # A reply cut off by the token budget is not an answer.
+                if self.last_trace.get("truncated"):
+                    budget = self._retry_budget_for(content)
+                    self.last_trace.pop("truncated", None)
+                    self.last_trace.pop("finish_reason", None)
+                    retry = self._next_model_reply(messages, max_tokens=budget)
+                    if retry:
+                        content = retry
+                if self.last_trace.get("truncated"):
+                    return (
+                        "⚠️ The reply was cut off by the token limit "
+                        f"(budget {self.cloud_max_tokens}). Raise cloud_max_tokens "
+                        "in settings and ask again."
+                    )
+
                 data = self._parse_json(content)
                 if data is None:
+                    if self._looks_like_action(content):
+                        # A tool call that did not parse is an error, not an answer.
+                        return (
+                            "⚠️ The model's tool call was malformed JSON and could "
+                            "not be executed. Nothing was changed. Please ask again."
+                        )
                     # model answered conversationally without JSON - accept it
                     self._remember("user", user_text)
                     self._remember("assistant", content)
@@ -1535,7 +1827,10 @@ class Agent:
             **self.last_trace,
             "thinking": f"Edited {path} ({outcome['replacements']} replacement(s)).",
         }
-        return f"✏️ Edited {path} ({outcome['replacements']} replacement(s))"
+        return (
+            f"OK file={path} action=edited replacements={outcome['replacements']}\n"
+            f"✏️ Edited {path} ({outcome['replacements']} replacement(s))"
+        )
 
     def _handle_file_operations(self, args_text, original_text):
         """List, read, search, create or modify files in the workspace.
@@ -1600,7 +1895,10 @@ class Agent:
             if not result.get("ok"):
                 return f"⚠️ {result.get('error')}"
             verb = "created" if operation == "create" else "modified"
-            return f"✏️ File {verb}: {result['path']}"
+            return (
+                f"OK file={result['path']} action={verb}\n"
+                f"✏️ File {verb}: {result['path']}"
+            )
 
         return f"⚠️ Unknown operation: {operation}"
 

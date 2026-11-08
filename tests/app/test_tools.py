@@ -28,6 +28,7 @@ def _ready_project(root):
         "FROM python:3.12\nHEALTHCHECK CMD curl -f /health\n"
     )
     (project / "pyproject.toml").write_text("[build-system]\nrequires=[]\n")
+    (project / "requirements.txt").write_text("pytest==8.0.0\n")
     return project
 
 

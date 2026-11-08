@@ -420,8 +420,37 @@ def _has_lockfile(project: Path) -> bool:
     )
 
 
+#: The ONE readiness rubric. Score, verdict and missing all come from these
+#: weights — they can never disagree, and git state never moves the number.
+_READINESS_WEIGHTS = {
+    "readme": 10,
+    "tests": 25,
+    "ci": 20,
+    "env_config": 10,
+    "build-or-container": 25,
+    "healthcheck": 5,
+    "lockfile": 5,
+}
+
+#: Human labels — internal keys never leak into output (the old "env_config"
+#: label was read literally as a module name by the model).
+_READINESS_LABELS = {
+    "readme": "README",
+    "tests": "tests",
+    "ci": "CI workflow",
+    "env_config": "env template (.env.example)",
+    "build-or-container": "build or container",
+    "healthcheck": "healthcheck",
+    "lockfile": "lockfile",
+}
+
+
 def assess_project(project: Path, base: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Judge one project's production readiness from evidence on disk."""
+    """Judge one project's production readiness from evidence on disk.
+
+    The score is the weighted sum of the same checks that produce ``missing``,
+    so ``score == 100`` ⟺ ``missing == []`` ⟺ production-ready.
+    """
     readme = next(
         (project / name for name in _READMES if (project / name).is_file()), None
     )
@@ -436,18 +465,24 @@ def assess_project(project: Path, base: dict[str, Any] | None = None) -> dict[st
         "lockfile": _has_lockfile(project),
         "build": bool(commands),
     }
-    missing: list[str] = []
-    for key in ("readme", "tests", "ci", "env_config"):
-        if not checks[key]:
-            missing.append(key)
-    if not (checks["container"] or checks["build"]):
-        missing.append("build-or-container")
+    passed = {
+        "readme": checks["readme"],
+        "tests": checks["tests"],
+        "ci": checks["ci"],
+        "env_config": checks["env_config"],
+        "build-or-container": checks["container"] or checks["build"],
+        "healthcheck": checks["healthcheck"],
+        "lockfile": checks["lockfile"],
+    }
+    missing = [key for key, ok in passed.items() if not ok]
+    score = sum(_READINESS_WEIGHTS[key] for key, ok in passed.items() if ok)
     verdict = "production-ready" if not missing else "not-production-ready"
     record: dict[str, Any] = {
         "name": project.name,
         "path": str(project),
         "verdict": verdict,
         "missing": missing,
+        "score": score,
         "checks": checks,
         "description": description,
         "build_commands": commands,
@@ -456,7 +491,6 @@ def assess_project(project: Path, base: dict[str, Any] | None = None) -> dict[st
     if base:
         record.update(
             {
-                "score": base.get("score"),
                 "health": base.get("health"),
                 "branch": base.get("branch"),
                 "dirty": base.get("dirty"),
@@ -481,27 +515,49 @@ def assess_all(
     return records
 
 
+def _rubric_line() -> str:
+    return "score = " + " · ".join(
+        f"{_READINESS_LABELS[key]} {weight}"
+        for key, weight in _READINESS_WEIGHTS.items()
+    )
+
+
 def format_assessment(records: list[dict[str, Any]]) -> str:
-    """A compact, honest report the user can act on."""
+    """A compact, honest report the user can act on.
+
+    One rubric for everyone: the score is the sum of the passed checks, the
+    verdict and the missing list come from the same table, and git state is
+    reported as context — never as points.
+    """
     if not records:
         return "No projects found to assess."
     ready = [r for r in records if r["verdict"] == "production-ready"]
-    lines = [f"Assessed {len(records)} project(s). Production-ready: {len(ready)}."]
+    lines = [
+        f"Assessed {len(records)} project(s). Production-ready: {len(ready)}.",
+        _rubric_line(),
+    ]
     for record in records:
         flag = "✅" if record["verdict"] == "production-ready" else "⚠️"
-        score = record.get("score")
-        suffix = f" · score {score}" if score is not None else ""
-        lines.append(f"\n{flag} {record['name']}{suffix}")
+        lines.append(f"\n{flag} {record['name']} · score {record['score']}")
         if record["description"]:
             lines.append(f"   {record['description'][:160]}")
         if record["missing"]:
-            lines.append("   missing: " + ", ".join(record["missing"]))
+            lines.append(
+                "   missing: "
+                + ", ".join(
+                    f"{_READINESS_LABELS[key]} (−{_READINESS_WEIGHTS[key]})"
+                    for key in record["missing"]
+                )
+            )
         else:
-            lines.append("   has readme, tests, CI, env template and a build path")
+            lines.append("   all checks pass — production-ready by this rubric")
         if record["build_commands"]:
             lines.append("   build: " + ", ".join(record["build_commands"]))
         if record.get("dirty"):
-            lines.append(f"   git: {record.get('branch') or '?'} · uncommitted changes")
+            lines.append(
+                f"   git: {record.get('branch') or '?'} · uncommitted changes"
+                " (context only — not scored)"
+            )
     return "\n".join(lines)
 
 

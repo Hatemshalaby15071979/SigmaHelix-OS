@@ -141,7 +141,16 @@ def test_local_payload_carries_every_skill(offline_agent, monkeypatch):
 def test_cloud_payload_carries_every_skill(offline_agent, monkeypatch):
     captured: dict = {}
 
-    def fake_cloud(provider, model, key, system, timeout=30, messages=None, trace=None):
+    def fake_cloud(
+        provider,
+        model,
+        key,
+        system,
+        timeout=30,
+        messages=None,
+        trace=None,
+        max_tokens=4096,
+    ):
         captured["messages"] = messages
         return "ok", None
 

@@ -20,7 +20,12 @@ _ALLOWED_YAML_KEYS = {
     "cloud_provider",
     "cloud_model",
     "plugins_enabled",
+    "cloud_max_tokens",
 }
+#: Valid range for the cloud reply budget (tokens).
+_CLOUD_MAX_TOKENS_MIN = 1024
+_CLOUD_MAX_TOKENS_MAX = 16384
+_CLOUD_MAX_TOKENS_DEFAULT = 4096
 _ALLOWED_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 _ALLOWED_MODEL_MODES = {"local", "cloud", "hybrid"}
 
@@ -40,6 +45,7 @@ class Settings:
     cloud_provider: str | None = None
     cloud_model: str | None = None
     plugins_enabled: tuple[str, ...] | None = None
+    cloud_max_tokens: int = _CLOUD_MAX_TOKENS_DEFAULT
 
 
 def _home(env: Mapping[str, str]) -> Path:
@@ -118,6 +124,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
     cloud_provider = None
     cloud_model = None
     plugins_enabled: tuple[str, ...] | None = None
+    cloud_max_tokens = _CLOUD_MAX_TOKENS_DEFAULT
 
     if config_path.exists():
         try:
@@ -167,6 +174,18 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
             ):
                 raise ConfigError("plugins_enabled must be a list of plugin ids")
             plugins_enabled = tuple(value)
+        if "cloud_max_tokens" in document:
+            value = document["cloud_max_tokens"]
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, int)
+                or not _CLOUD_MAX_TOKENS_MIN <= value <= _CLOUD_MAX_TOKENS_MAX
+            ):
+                raise ConfigError(
+                    f"cloud_max_tokens must be an integer between "
+                    f"{_CLOUD_MAX_TOKENS_MIN} and {_CLOUD_MAX_TOKENS_MAX}"
+                )
+            cloud_max_tokens = value
 
     env_database_path = source.get("SIGMAHELIX_DB_PATH")
     if env_database_path is not None:
@@ -192,6 +211,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         cloud_provider,
         cloud_model,
         plugins_enabled,
+        cloud_max_tokens,
     )
 
 
