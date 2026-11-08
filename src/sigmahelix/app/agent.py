@@ -16,6 +16,7 @@ Agent — LLM-first Tommy (Ollama) with deterministic keyword fallback.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import threading
@@ -41,6 +42,8 @@ from .plugins import PluginRegistry
 from .security import is_loopback_url
 from .skills import SkillLibrary
 from .voice import VoiceEngine
+
+logger = logging.getLogger(__name__)
 
 _configured_hosts = os.environ.get(
     "OLLAMA_HOSTS", "http://localhost:11435,http://localhost:11434"
@@ -406,6 +409,9 @@ class Agent:
 
     def _build_messages(self, user_text):
         messages = [{"role": "system", "content": self.system_prompt()}]
+        self._inject_prior_tool_results(messages)
+
+        # Existing history logic (local replay or ledger replay if opted in)
         history = self.history
         if not history and self._may_replay_history():
             # After a restart the in-memory list is empty; the ledger remembers.
@@ -413,10 +419,51 @@ class Agent:
                 history = self.ledger.recent_conversation(limit=12)
             except Exception:  # noqa: BLE001 - no DB must never break a prompt
                 history = []
-        for role, content in history[-8:] if self.history else history:
+        for role, content in self.history[-8:] if self.history else history:
             messages.append({"role": role, "content": content})
         messages.append({"role": "user", "content": user_text})
         return messages
+
+    def _inject_prior_tool_results(self, messages) -> None:
+        """Append a bounded, redacted summary of this session's earlier steps.
+
+        This is what stops the model from denying work it actually did (or
+        inventing work it did not): it can see, on turn N, the tool actions and
+        results of turns 1..N-1 in this same session. Cloud privacy is intact —
+        only the current session is replayed, never another session's history.
+
+        A replay failure must not break the prompt, but it must not be silent
+        either: otherwise a broken query looks exactly like "there was no prior
+        work", which is the failure this method exists to prevent.
+        """
+        try:
+            ledger = self.ledger
+            with ledger.database.connection() as connection:
+                rows = connection.execute(
+                    "SELECT s.action, s.ok, s.summary, s.args "
+                    "FROM agent_steps s "
+                    "JOIN agent_turns t ON t.id = s.turn_id "
+                    "WHERE t.tenant_id = ? AND t.session_id = ? "
+                    "AND s.kind = 'tool_call' "
+                    "ORDER BY t.turn_index DESC, s.seq DESC LIMIT 3",
+                    (ledger.tenant_id, self.session_id),
+                ).fetchall()
+        except Exception as exc:  # noqa: BLE001 - the prompt must still build
+            self.last_trace["prior_tools_error"] = f"{type(exc).__name__}: {exc}"
+            logger.warning("prior tool replay failed: %s", exc)
+            return
+        if not rows:
+            return
+
+        lines = ["=== PRIOR TOOL RESULTS (same session, redacted) ==="]
+        for row in reversed(rows):  # oldest first, so the model reads in order
+            action = row["action"] or "unknown"
+            status = "OK" if row["ok"] else "FAIL"
+            summary = (row["summary"] or "")[:100]
+            args = (row["args"] or "")[:100]
+            lines.append(f"{action}[{status}]: {summary} {args}".rstrip())
+        lines.append("=== END PRIOR TOOL RESULTS ===")
+        messages.append({"role": "system", "content": "\n".join(lines)})
 
     def _may_replay_history(self) -> bool:
         """Whether past turns may be replayed into the model prompt.
@@ -877,6 +924,35 @@ class Agent:
             return "100"
         return ""
 
+    @staticmethod
+    def _terminal_memory(reply: Any) -> str:
+        """What to remember as the assistant's *own* words for a final step.
+
+        Never the raw tool observation: storing tool output as an assistant
+        message makes the next turn believe the model said it.
+        """
+        text = str(reply or "").strip()
+        return text or "I could not produce an answer this turn (no reply)."
+
+    @staticmethod
+    def _terminal_answer(reply: Any, observation: Any) -> str:
+        """The user-facing answer for a final step.
+
+        A raw tool observation is never passed off as the model's own answer;
+        it is clearly labelled as the last tool result. An empty reply with no
+        tool result is an explicit failure notice, never a success word.
+        """
+        text = str(reply or "").strip()
+        if text:
+            return text
+        if observation:
+            return (
+                "I could not produce an answer this turn (no reply). "
+                "The last tool result was:\n\n"
+                f"{observation}"
+            )
+        return "I could not produce an answer this turn (no reply, no tool result)."
+
     def _agent_loop(self, messages: list[dict[str, Any]], user_text: str) -> str:
         """Let the model use tools until it can answer with evidence.
 
@@ -977,8 +1053,8 @@ class Agent:
                     self.last_trace["evidence"] = list(data.get("evidence") or [])
                 self.last_trace["steps"] = steps
                 self._remember("user", user_text)
-                self._remember("assistant", reply or observation)
-                return reply or observation or "Done."
+                self._remember("assistant", self._terminal_memory(reply))
+                return self._terminal_answer(reply, observation)
 
             started = time.perf_counter()
             executed = self._execute(action, args_text, user_text)
@@ -1013,8 +1089,14 @@ class Agent:
 
         self.last_trace["steps"] = steps
         self._remember("user", user_text)
-        self._remember("assistant", observation)
-        return observation or "I ran out of steps before reaching an answer."
+        self._remember("assistant", "I ran out of steps before reaching an answer.")
+        if observation:
+            return (
+                "I ran out of steps before reaching an answer. "
+                "The last tool result was:\n\n"
+                f"{observation}"
+            )
+        return "I ran out of steps before reaching an answer."
 
     def _llm_roundtrip(self, user_text):
         """One LLM turn: intent JSON -> execute -> maybe speak/natural reply."""
@@ -1092,7 +1174,11 @@ class Agent:
                 elif executed:
                     out = executed
                 else:
-                    out = f"🤖 {reply}" if reply else "Done."
+                    out = (
+                        f"🤖 {reply}"
+                        if reply
+                        else "I could not produce an answer (no reply, no tool result)."
+                    )
                 self._remember("user", user_text)
                 self._remember("assistant", out)
                 return out
@@ -1119,6 +1205,16 @@ class Agent:
             return None
 
     def _remember(self, role, content):
+        # Only the model's own words go into assistant history. Raw tool output
+        # is never stored as something the model said: it is re-injected as a
+        # labelled system block in _build_messages instead. Storing it here
+        # would make the next turn "believe" the model produced that output.
+        content = content or ""
+        if role == "assistant":
+            if not content:
+                return  # an empty assistant turn is invalid for some providers
+            if content.startswith("TOOL RESULT") or content.startswith("=== PRIOR"):
+                return  # tool output must never wear the assistant's clothes
         self.history.append((role, content[:400]))
         if len(self.history) > 10:
             self.history = self.history[-10:]

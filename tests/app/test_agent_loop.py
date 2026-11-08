@@ -231,3 +231,56 @@ def test_steps_are_recorded_with_plan_and_args(cloud_agent, workspace):
     assert cloud_agent.last_trace.get("plans") == ["see what the project is missing"]
     assert cloud_agent.last_trace.get("truncated") is False
     assert cloud_agent.last_trace.get("finish_reason") == "stop"
+
+
+def test_final_with_empty_reply_labels_tool_output_not_answer(cloud_agent, workspace):
+    """A final step with no reply must not pass the raw tool observation off as
+    the model's answer, and must not store it as the model's own words."""
+    tool_call = json.dumps(
+        {
+            "action": "file_operations",
+            "content": json.dumps(
+                {"operation": "create", "path": "demo/probe.txt", "content": "hi"}
+            ),
+            "reply": "",
+        }
+    )
+    final_empty = json.dumps({"action": "final", "content": "", "reply": ""})
+    fake = ScriptedCloud(cloud_agent, [tool_call, final_empty])
+    cloud_agent._cloud_chat = fake  # type: ignore[method-assign]
+
+    reply = cloud_agent.process_command("create a probe file in demo")
+
+    assert "could not produce an answer" in reply.lower()
+    assert "last tool result" in reply.lower()
+    # The observation is labelled, not presented as the model's own answer.
+    assert cloud_agent.history[-1] == (
+        "assistant",
+        "I could not produce an answer this turn (no reply).",
+    )
+    assert "Created" not in cloud_agent.history[-1][1]
+
+
+def test_step_exhaustion_labels_tool_output_and_never_stores_it(cloud_agent, workspace):
+    """When the step budget runs out, the last observation is labelled as a tool
+    result, never returned bare or remembered as the model's reply."""
+    tool_call = json.dumps(
+        {
+            "action": "file_operations",
+            "content": json.dumps(
+                {"operation": "create", "path": "demo/loop.txt", "content": "x"}
+            ),
+            "reply": "",
+        }
+    )
+    fake = ScriptedCloud(cloud_agent, [tool_call])  # repeats for every step
+    cloud_agent._cloud_chat = fake  # type: ignore[method-assign]
+
+    reply = cloud_agent.process_command("keep going forever")
+
+    assert "ran out of steps" in reply.lower()
+    assert "last tool result" in reply.lower()
+    assert cloud_agent.history[-1] == (
+        "assistant",
+        "I ran out of steps before reaching an answer.",
+    )

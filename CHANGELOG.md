@@ -6,6 +6,21 @@ All notable changes to SigmaHelix are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- **Tommy no longer denies work it actually did.** `_build_messages` re-injects
+  a bounded, redacted summary of this session's earlier tool steps (action,
+  status, result) into every prompt, even in Cloud mode with history replay
+  switched off — so the model can see its own evidence instead of
+  confabulating. Only the current session is replayed; another session's steps
+  are never sent. A replay failure is logged and recorded in `last_trace`,
+  never silently treated as "there was no prior work".
+- **Raw tool output is no longer passed off as the model's answer.** A `final`
+  step with an empty reply now returns an explicit "could not produce an
+  answer" notice with the last tool result clearly labelled, and the step-budget
+  exhaustion path does the same. Neither path stores the raw observation as an
+  assistant message, so it cannot poison the next turn's history.
+
 ## [1.0.0] - 2026-11-08
 
 ### Added

@@ -1063,3 +1063,83 @@ def test_recovered_intent_and_skill_rule(ledger):
     skill_titles = [r["title"] for r in recs if r["kind"] == "skill"]
     assert any("deploy site" in title for title in skill_titles)
     assert not any("fix demo" in title for title in skill_titles)
+
+
+def test_build_messages_injects_same_session_tool_results(monkeypatch):
+    """The model must be able to see what it actually did earlier in the same
+    session, even in Cloud mode with history replay switched off."""
+    agent = _offline_agent(monkeypatch)
+    agent.model_kind = "cloud"
+    agent.cloud_replay_history = False
+    tid = agent.ledger.open_turn(agent.session_id, "run the tests", "loop", "cloud")
+    agent.ledger.add_step(
+        tid,
+        "tool_call",
+        action="run_tests",
+        args="pytest -q",
+        summary="465 passed",
+        ok=True,
+    )
+    agent.ledger.close_turn(tid, reply="ok", outcome="acted")
+
+    messages = agent._build_messages("what did you run?")
+    blocks = [
+        m["content"]
+        for m in messages
+        if m["role"] == "system" and "PRIOR TOOL RESULTS" in m["content"]
+    ]
+    assert len(blocks) == 1
+    assert "run_tests[OK]" in blocks[0]
+    assert "465 passed" in blocks[0]
+    # privacy: replay is allowed even though cloud history replay is off
+    assert agent._may_replay_history() is False
+
+
+def test_prior_tool_results_exclude_other_sessions(monkeypatch):
+    agent = _offline_agent(monkeypatch)
+    tid = agent.ledger.open_turn("another-session", "secret", "loop", "cloud")
+    agent.ledger.add_step(
+        tid, "tool_call", action="run_tests", summary="SECRET_MARKER", ok=True
+    )
+    agent.ledger.close_turn(tid, reply="ok", outcome="acted")
+
+    messages = agent._build_messages("hello")
+    assert not any("SECRET_MARKER" in m["content"] for m in messages)
+
+
+def test_prior_tool_results_are_bounded(monkeypatch):
+    agent = _offline_agent(monkeypatch)
+    tid = agent.ledger.open_turn(agent.session_id, "many steps", "loop", "cloud")
+    for _ in range(6):
+        agent.ledger.add_step(
+            tid, "tool_call", action="run_tests", args="a" * 500, summary="s" * 500
+        )
+    agent.ledger.close_turn(tid, reply="ok", outcome="acted")
+
+    messages = agent._build_messages("x")
+    block = next(m["content"] for m in messages if "PRIOR TOOL RESULTS" in m["content"])
+    rows = [line for line in block.splitlines() if line.startswith("run_tests")]
+    assert len(rows) == 3  # only the three most recent steps
+    assert all(len(line) <= 230 for line in rows)  # each line is bounded
+
+
+def test_prior_tool_replay_failure_is_observable(monkeypatch):
+    """A broken replay must not look like 'there was no prior work'."""
+    agent = _offline_agent(monkeypatch)
+
+    class BrokenDB:
+        @staticmethod
+        def connection():
+            raise RuntimeError("db gone")
+
+    class BrokenLedger:
+        tenant_id = "default"
+        database = BrokenDB()
+
+    agent._ledger_obj = BrokenLedger()  # type: ignore[assignment]
+    agent.last_trace = {}
+
+    messages = agent._build_messages("hello")
+
+    assert messages[-1] == {"role": "user", "content": "hello"}
+    assert "RuntimeError: db gone" in agent.last_trace["prior_tools_error"]
