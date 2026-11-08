@@ -23,6 +23,7 @@ class MemorySecretStore:
 def isolated_user_data(tmp_path, monkeypatch):
     """Never let tests read or write the real user data directory or keyring."""
     monkeypatch.setenv("SIGMAHELIX_DATA_DIR", str(tmp_path / "sigmahelix"))
+    monkeypatch.setenv("SIGMAHELIX_CONFIG_FILE", str(tmp_path / "config.yaml"))
     monkeypatch.setenv("SIGMAHELIX_NO_AUDIO", "1")
 
     import sigmahelix.app.models as models

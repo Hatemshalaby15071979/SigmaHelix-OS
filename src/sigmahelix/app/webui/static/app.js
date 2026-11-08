@@ -554,6 +554,61 @@
     }
   });
 
+  // ---------- plugins ----------
+  let pluginState = { plugins: [], presets: [], enabled: [] };
+
+  async function loadPlugins() {
+    pluginState = await api("/api/plugins");
+    renderPlugins();
+  }
+
+  function renderPlugins() {
+    const rows = $("#plugin-rows");
+    rows.replaceChildren();
+    for (const plugin of pluginState.plugins) {
+      const row = el("div", "plugin-row");
+      const info = el("div", "plugin-info");
+      info.appendChild(el("strong", null, plugin.name));
+      info.appendChild(el("p", "hint", plugin.description));
+      if (plugin.permissions && plugin.permissions.length) {
+        info.appendChild(el("span", "perm", "can: " + plugin.permissions.join(", ")));
+      }
+      row.appendChild(info);
+
+      const label = el("label", "switch");
+      const toggle = el("input");
+      toggle.type = "checkbox";
+      toggle.checked = plugin.enabled;
+      toggle.disabled = plugin.always_on;
+      toggle.addEventListener("change", async () => {
+        try {
+          pluginState = await post("/api/plugins/toggle", {
+            id: plugin.id,
+            enabled: toggle.checked,
+          });
+          renderPlugins();
+          setStatus(`${plugin.name} ${toggle.checked ? "on" : "off"}`);
+        } catch (e) {
+          setStatus(e.message, true);
+          toggle.checked = plugin.enabled;
+        }
+      });
+      label.appendChild(toggle);
+      row.appendChild(label);
+      rows.appendChild(row);
+    }
+  }
+
+  $("#plugin-reset").addEventListener("click", async () => {
+    try {
+      pluginState = await post("/api/plugins/preset", { preset: "tommy" });
+      renderPlugins();
+      setStatus("Tommy is back to full");
+    } catch (e) {
+      setStatus(e.message, true);
+    }
+  });
+
   // ---------- refresh ----------
   async function refresh() {
     setStatus("refreshing…");
@@ -569,6 +624,7 @@
         : "keyword mode";
       $("#agenda-text").textContent = state.agenda || "";
       await loadSettings();
+      await loadPlugins();
       setStatus(`updated ${new Date().toLocaleTimeString()}`);
     } catch (error) {
       setStatus(error.message, true);

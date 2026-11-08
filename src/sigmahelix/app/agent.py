@@ -29,6 +29,7 @@ from .managers import (
     ProjectsManager,
     TasksManager,
 )
+from .plugins import PluginRegistry
 from .security import is_loopback_url
 from .skills import SkillLibrary
 from .voice import VoiceEngine
@@ -150,7 +151,7 @@ def wants_agenda(text: str) -> bool:
 
 
 SYSTEM_PROMPT = """You are Tommy, running locally on the user's machine.
-You manage tasks, notes, projects, a calendar, app launching, and a released-app explorer.
+You get real work done with the tools the user has enabled.
 
 CORE PERSONA - ALWAYS:
 - You are Tommy. Introduce yourself as Tommy — never as a bot, a service, or a role.
@@ -158,85 +159,40 @@ CORE PERSONA - ALWAYS:
 - Human tone and style - never robotic or AI-cliché
 - Never assume, never pretend to know things you don't
 - Always provide evidence/sources when answering with factual claims
-- Doer mindset: can perform web search, analyze data, create documents, translate, summarize
+- Doer mindset: read, search, analyse, build, summarise — with the tools you have
 - ADHD-friendly: direct, structured, visible wins, specific time estimates
 
 OUTPUT FORMAT:
 - Respond ONLY with compact JSON, no markdown:
-  {"action": "<create_task|create_task_with_questions|list_tasks|complete_task|
-              delete_task|pin_task|unpin_task|add_question|answer_question|
-              reopen_question|show_questions|execute_task|create_note|
-              list_notes|edit_note|delete_note|pin_note|unpin_note|
-              list_projects|explore|calendar|launch|create_project|
-              file_operations|fetch_url|assess_projects|create_document|
-              chat|help>",
+  {"action": "<one of the ENABLED TOOLS listed at the end of this prompt>",
    "content": "<needed args, empty if none>",
    "reply": "<short friendly answer to show/spell out for the user>"}
+- The ENABLED TOOLS block at the end is authoritative. Only those actions
+  exist. If a capability is turned off, say so and point the user to
+  Settings → Plugins; never pretend to do it.
 
 RULES:
-- You are a DOER. When the user asks you to build, create, or make a webapp,
-  app, website, script, or anything on disk, you MUST use create_project or
-  file_operations to actually write the files — never say you cannot do it here.
-  Projects are written under the projects directory and show a Run link.
+- You are a DOER. When the user asks you to build, create, or make anything on
+  disk, use the create/write actions in ENABLED TOOLS — never say you cannot do
+  it here.
 - Tasks are question-driven. A task is only "ready" once every sub-question has
-  an answer+evidence. You CAN create tasks with questions, add questions to a
-  task, answer questions, reopen them, show them, and EXECUTE a task (answer all
-  its open questions using your reasoning, then complete it). Use these actions;
-  they are real and available to you.
-- create_task_with_questions: content = "TITLE" on the first line, then one
-  question per following line (separate lines or "||").
-- add_question: content = "to task <id>: <question text>".
-- answer_question: content = "question <qid> on task <id>: <answer>".
-- show_questions: content = "task <id>".
-- execute_task: content = "task <id>" — you answer the open questions yourself.
-- create_project: content = the project name/description. You scaffold a runnable
-  app there; follow up with file_operations to add or edit files.
-- file_operations: content = JSON {"operation":"list|read|search|create|modify",
-  "path":"<relative path in the workspace>", "content":"<text for create/modify>",
-  "pattern":"<regex for search>", "glob":"<optional file glob>"}. The workspace is
-  the projects directory (cloned_repos); you may read, create and modify ANY file
-  in it. Use "list" to explore, "read" to inspect a file, "search" to grep.
-- fetch_url: content = a public http(s) URL. You CAN visit pages and read their
-  text. Use it for documentation, GitHub pages, raw README files, articles.
-  Never say "I'm not a browser" — call fetch_url. (Pages behind a login wall,
-  like a private LinkedIn profile, may still return only a login page; say so.)
-- assess_projects: content = "" or a project name. Scans every project in the
-  workspace and reports real production-readiness evidence (readme, tests, CI,
-  container, env template, build commands, git state). Use this to answer
-  "which project is production ready?" — never guess or just list names.
-- create_document: content = JSON {"title":"...","sections":[{"heading":"...",
-  "body":"..."}],"filename":"resume.pdf"}. Writes a real PDF into the workspace.
-  Use local READMEs and fetched pages for facts; never invent career details.
+  an answer with evidence. The task-question actions are real; use them.
 - Decide NOTE vs TASK by what the user wants, not by which words appear:
-  * create_task  = something to DO later: a duty, reminder, deadline, errand,
-    "remind me…", "remember to…", "call X at 4pm", "review the report Friday",
-    "add a task…". Anything with a verb the user must perform is a TASK.
-  * create_note  = information to KEEP, with nothing to do: "note that the
-    supplier is closed on Fridays", "write down the client prefers email",
-    "memo: invoice number 4471". If the user says "remember to <do something>"
-    it is a TASK, never a note.
-- create_task: content = the task itself, clean of command words (weekly/monthly in text sets frequency).
-- complete_task / delete_task: content = numeric ID if the user gave one, else empty.
-- pin_task / pin_note: content = numeric ID, or empty to pin the newest item.
-  A pinned task/note is PROTECTED: it stays at the top of the list and cannot be
-  deleted until the user explicitly unpins it. Use this when the user says
-  "pin", "keep this", "don't lose this", "keep it there".
-- unpin_task / unpin_note: content = numeric ID, or empty to unpin the newest pinned item.
-- calendar: content = today|tomorrow|week|month.
-- launch: content = study_studio or ld_command_center.
-- chat: for greetings/small talk/weather-like questions - reply directly in "reply".
-- help: explain capabilities in "reply".
-- Never invent data: task IDs and lists come from the app, so when unsure prefer list actions
-  or help.
+  * TASK = something to DO later: a duty, reminder, deadline, errand,
+    "remind me…", "remember to…", "call X at 4pm", "review the report Friday".
+    Anything with a verb the user must perform is a TASK.
+  * NOTE = information to KEEP, with nothing to do: "note that the supplier is
+    closed on Fridays", "the client prefers email", "memo: invoice 4471".
+- Pinned tasks and notes are PROTECTED: they stay at the top of the list and
+  cannot be deleted until the user explicitly unpins them.
+- Never invent data: ids and lists come from the app, so when unsure prefer a
+  list action or help.
 
-SPECIAL CAPABILITIES (agent can call when needed):
-- Web search: search the web for information, summarize findings
-- File operations: create, modify, read files
-- Data analysis: analyze provided data, generate insights
-- Document creation: create professional PDFs/documents
-- Translation: translate text between languages
-- YouTube video summary: summarize video content, recommend related content
-- Skill invocation: can call injected skills for specialized tasks
+CAPABILITIES:
+- Everything you can do is in the ENABLED TOOLS block at the end of this
+  prompt, with the exact arguments for each action. That list is live: the user
+  turns plugins on and off in Settings. If an action is not listed there, it
+  does not exist for you right now — say so and point to Settings → Plugins.
 
 NEVER:
 - Fake knowledge or pretend
@@ -287,9 +243,10 @@ class Agent:
         except Exception:  # noqa: BLE001 - fall back to in-memory defaults
             pass
         self.injected_skills = {}  # Store user-injected capability prompts
-        self.persona_style = "honest"  # Tommy persona style: honest, human, evidence
         # Operating instructions that follow every model call, local or cloud.
         self.skills = SkillLibrary()
+        # Every capability is a plugin; only enabled ones reach the model.
+        self.plugins = PluginRegistry()
         self.last_composition = None
         # What the last model turn did: thinking text and token spend.
         self.last_trace: dict[str, Any] = {}
@@ -312,7 +269,8 @@ class Agent:
         Ollama call and the cloud call receive the same text, so switching
         provider can never drop the user's rules.
         """
-        composition = self.skills.compose(SYSTEM_PROMPT + self.capability_block())
+        base = SYSTEM_PROMPT + self.capability_block() + self.plugins.prompt_block()
+        composition = self.skills.compose(base)
         self.last_composition = composition
         return composition.prompt
 
@@ -366,6 +324,8 @@ class Agent:
                 # A refusal is never acceptable when the user asked us to build:
                 # scaffold the project for real instead of apologising.
                 if self._looks_like_build(raw) and self._is_refusal(result):
+                    if not self.plugins.is_enabled("projects"):
+                        return self.plugins.off_message("projects")
                     return self._handle_create_project("", raw)
                 return result
 
@@ -652,6 +612,18 @@ class Agent:
         }
 
     def _execute(self, action, args_text, original_text):
+        """Gate an action by its plugin, then run the legacy dispatcher.
+
+        Unknown actions pass through (the legacy path returns None for them).
+        Known actions from a disabled plugin return an 'off' message instead of
+        silently doing something the user turned off.
+        """
+        gate = self.plugins.gate(action)
+        if gate is not None:
+            return gate
+        return self._execute_legacy(action, args_text, original_text)
+
+    def _execute_legacy(self, action, args_text, original_text):
         t = original_text.lower()
         intent = classify_intent(original_text)
         if action == "create_task":
@@ -749,6 +721,11 @@ class Agent:
         low = (text or "").lower()
         has_task = re.search(r"\btask\s+\d+", low) is not None
         has_question = re.search(r"\bquestion\s+\d+", low) is not None
+        wants_question_action = ("question" in low and (has_task or has_question)) or (
+            has_task and any(word in low for word in ("execute", "work on", "run"))
+        )
+        if wants_question_action and not self.plugins.is_enabled("task_questions"):
+            return self.plugins.off_message("task_questions")
         if "question" in low and (has_task or has_question):
             if any(w in low for w in ("execute", "answer", "fill", "resolve")):
                 return (
@@ -784,6 +761,8 @@ class Agent:
                 "analy",
             )
         ):
+            if not self.plugins.is_enabled("web"):
+                return self.plugins.off_message("web")
             return self._handle_fetch_url(url.group(0), text)
         if (
             "production ready" in low
@@ -794,16 +773,22 @@ class Agent:
                 and "project" in low
             )
         ):
+            if not self.plugins.is_enabled("projects"):
+                return self.plugins.off_message("projects")
             return self._handle_assess_projects("", text)
         if any(word in low for word in ("resume", " cv", "curriculum")) and any(
             word in low
             for word in ("create", "make", "build", "generate", "write", "pdf")
         ):
+            if not self.plugins.is_enabled("documents"):
+                return self.plugins.off_message("documents")
             return self._handle_resume(text)
         if (
             low.startswith(("list files", "read file", "search for", "grep "))
             or "read the readme" in low
         ):
+            if not self.plugins.is_enabled("files"):
+                return self.plugins.off_message("files")
             return self._handle_file_operations("", text)
         return None
 
@@ -1305,6 +1290,8 @@ class Agent:
 
         # Building a project offline: actually scaffold it, never refuse.
         if self._looks_like_build(text):
+            if not self.plugins.is_enabled("projects"):
+                return self.plugins.off_message("projects")
             return self._handle_create_project("", original)
 
         intent = classify_intent(text)
@@ -1323,10 +1310,14 @@ class Agent:
             wants_task = any(w in text for w in ("task", "todo", "to-do"))
             wants_note = any(w in text for w in ("note", "memo"))
             if wants_task and not wants_note:
+                if off := self._off("tasks"):
+                    return off
                 return (
                     self.tasks.unpin_task if verb == "unpin" else self.tasks.pin_task
                 )(original)
             if wants_note and not wants_task:
+                if off := self._off("notes"):
+                    return off
                 return (
                     self.notes.unpin_note if verb == "unpin" else self.notes.pin_note
                 )(original)
@@ -1339,38 +1330,62 @@ class Agent:
         if any(w in text for w in ("list", "show", "view", "what", "open")) and any(
             w in text for w in ("task", "todo", "to-do")
         ):
+            if off := self._off("tasks"):
+                return off
             return self.tasks.list_tasks(text)
         if any(w in text for w in ("complete", "done", "finished")) and "task" in text:
+            if off := self._off("tasks"):
+                return off
             return self.tasks.complete_task(text)
         if any(w in text for w in ("delete", "remove")) and "task" in text:
+            if off := self._off("tasks"):
+                return off
             return self.tasks.delete_task(text)
 
         # notes — read/edit/delete before create
         if any(w in text for w in ("list", "show", "view", "what", "open")) and any(
             w in text for w in ("note", "memo")
         ):
+            if off := self._off("notes"):
+                return off
             return self.notes.list_notes(text)
         if any(w in text for w in ("delete", "remove")) and "note" in text:
+            if off := self._off("notes"):
+                return off
             return self.notes.delete_note(text)
         if any(w in text for w in ("edit", "update", "change")) and "note" in text:
+            if off := self._off("notes"):
+                return off
             return self.notes.edit_note(original)
 
         # create: duty -> task, information -> note
         if intent == "task":
+            if off := self._off("tasks"):
+                return off
             return self.tasks.create_task(original)
         if intent == "note":
+            if off := self._off("notes"):
+                return off
             return self.notes.create_note(original)
 
         # calendar
         if wants_agenda(original):
+            if off := self._off("calendar"):
+                return off
             return self.calendar.get_tasks_for_date(original)
 
         # projects / explorer / launchers
         if "explorer" in text or ".exe" in text or ("show" in text and "apps" in text):
+            if off := self._off("projects"):
+                return off
             return self.projects.explore_apps(text)
         if "project" in text or "repo" in text:
+            if off := self._off("projects"):
+                return off
             return self.projects.list_projects(text)
         if "launch" in text or "open" in text:
+            if off := self._off("launch"):
+                return off
             if "study" in text:
                 return self.launcher.launch_study_studio(text)
             if "l-d" in text or "command center" in text or "ld" in text:
@@ -1389,35 +1404,46 @@ class Agent:
             + "\nTry: 'help', 'create task report', 'show projects', 'explorer'."
         )
 
+    def _off(self, plugin_id):
+        """Off-message when a plugin is disabled, else None.
+
+        The keyword routes call managers directly for speed, so they must ask
+        the registry too — otherwise a disabled plugin still runs offline.
+        """
+        if self.plugins.is_enabled(plugin_id):
+            return None
+        return self.plugins.off_message(plugin_id)
+
     def _default_help(self):
         status = (
             f"ONLINE — Local model: {OLLAMA_HOSTS[0]} @ {self.model_name} (GPU accelerated)"
             if self.llm_available
             else "OFFLINE (start: bash start_gpu_ollama.sh; then: ~/.local/bin/ollama pull llama3.2:1b)"
         )
-        return f"""📊 LLM status: {status}
-
-Natural language (needs LLM):   e.g. "schedule meeting tomorrow", "what should I work on?"
-
-Fast direct commands:
-  TASKS      create task <name> · list tasks · complete task <id> · delete task <id>
-  NOTES      create note <text> · view notes · edit note <id> <text> · delete note <id>
-  PIN        pin task <id> · pin note <id> · unpin task <id> · unpin note <id>
-             pinned items stay first and can't be deleted until unpinned
-  PROJECTS   show projects · explorer (.exe scan)
-  CALENDAR   today · tomorrow · this week · this month
-  LAUNCH     launch study studio · launch ld command center
-  VOICE      listen (speak last reply) · listen <text> · stop (mute) · mic (voice input)
-  OTHER      help · exit
-
-MODES:
-  Local: Only use Ollama GPU-local models
-  Cloud: Use OpenAI/OpenRouter via API keys
-  Hybrid: Cloud for reasoning, local for token-consuming tasks
-
-SKILLS:
-  Web search, file ops, data analysis, document creation, translation,
-  YouTube summary, skill injection
-
-PERSONALITY:
-  Tommy: honest, practical, evidence-based, human tone, never fakes, always a doer"""
+        lines = [
+            f"📊 LLM status: {status}",
+            "",
+            "What I can do right now (live — change it in Settings → Plugins):",
+        ]
+        for plugin in self.plugins.plugins():
+            if not self.plugins.is_enabled(plugin.id):
+                continue
+            actions = " · ".join(action.name for action in plugin.actions)
+            lines.append(f"  {plugin.name:<22} {actions}")
+        off = [
+            plugin.name
+            for plugin in self.plugins.plugins()
+            if not self.plugins.is_enabled(plugin.id)
+        ]
+        if off:
+            lines.extend(["", "Turned off: " + ", ".join(off)])
+        lines.extend(
+            [
+                "",
+                "Natural language works for all of the above when a model is connected.",
+                "VOICE: listen (speak last reply) · listen <text> · stop · mic",
+                "MODES: Local / Cloud / Hybrid — switch in Settings.",
+                "PERSONALITY: Tommy — honest, practical, evidence-based, never fakes, always a doer.",
+            ]
+        )
+        return "\n".join(lines)

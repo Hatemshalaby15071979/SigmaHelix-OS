@@ -254,3 +254,51 @@ def test_delete_key_clears_a_configured_provider(settings_server):
     openrouter = next(p for p in after["providers"] if p["name"] == "openrouter")
     assert openrouter["has_key"] is False
     assert openrouter["verified"] is False
+
+
+def test_plugins_endpoint_lists_every_plugin(settings_server):
+    base, token, _ = settings_server
+    status, body = call(base, "/api/plugins", token)
+    data = json.loads(body)
+    assert status == 200
+    ids = {p["id"] for p in data["plugins"]}
+    assert {"core", "tasks", "projects", "files", "web"} <= ids
+    assert data["enabled"] == sorted(ids)  # one persona: everything on
+    assert "core" in data["enabled"]
+    core = next(p for p in data["plugins"] if p["id"] == "core")
+    assert core["always_on"] is True
+    assert {p["id"] for p in data["presets"]} >= {"tommy", "coding", "minimal"}
+
+
+def test_plugins_toggle_changes_state_and_persists(settings_server):
+    base, token, config_path = settings_server
+    status, body = call(
+        base, "/api/plugins/toggle", token, {"id": "web", "enabled": False}
+    )
+    data = json.loads(body)
+    assert status == 200
+    assert "web" not in data["enabled"]
+    saved = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+    assert "web" not in saved["plugins_enabled"]
+
+    # The running agent is gated immediately — no restart.
+    status, body = call(base, "/api/chat", token, {"text": "read https://example.com"})
+    assert "turned off" in json.loads(body)["reply"].lower()
+
+
+def test_plugins_preset_endpoint(settings_server):
+    base, token, _ = settings_server
+    status, body = call(base, "/api/plugins/preset", token, {"preset": "minimal"})
+    data = json.loads(body)
+    assert status == 200
+    assert data["enabled"] == ["core"]
+
+
+def test_plugins_rejects_unknown_and_always_on(settings_server):
+    base, token, _ = settings_server
+    with pytest.raises(urllib.error.HTTPError) as exc:
+        call(base, "/api/plugins/toggle", token, {"id": "teleport", "enabled": True})
+    assert exc.value.code == 400
+    with pytest.raises(urllib.error.HTTPError) as exc:
+        call(base, "/api/plugins/toggle", token, {"id": "core", "enabled": False})
+    assert exc.value.code == 400

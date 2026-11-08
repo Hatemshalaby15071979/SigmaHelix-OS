@@ -778,7 +778,7 @@ class SigmaHelixApp:
             self.status.configure(text=f"⚡ Unknown skill: {skill_name}")
 
     def _render_persona_section(self, parent=None):
-        """Render Tommy persona configuration section."""
+        """Render Tommy's persona — one combined identity, not a menu of styles."""
         parent = parent if parent is not None else self.settings_frame
         frame = ctk.CTkFrame(parent, fg_color="transparent")
         frame.pack(fill="both", expand=True, padx=8, pady=8)
@@ -790,39 +790,18 @@ class SigmaHelixApp:
             text_color=T.colors["accent"],
         ).pack(anchor="w")
 
-        persona_options = [
-            ("Honest & Practical", "honest"),
-            ("Human Tone", "human"),
-            ("Evidence-Aware", "evidence"),
-        ]
-
-        for label, value in persona_options:
-            is_selected = (self.agent.persona_style or "honest") == value
-            ctk.CTkButton(
-                frame,
-                text=label,
-                height=28,
-                font=T.font_btn,
-                fg_color=T.colors["accent"] if is_selected else T.colors["bg_main"],
-                hover_color=T.colors["accent_hover"]
-                if is_selected
-                else T.colors["frame"],
-                command=lambda v=value: self._set_persona(v),
-            ).pack(fill="x", pady=1)
-
-        # Current persona indicator
         ctk.CTkLabel(
             frame,
-            text=f"Current: {self.agent.persona_style or 'honest'}",
-            font=("Segoe UI", 9),
+            text=(
+                "One persona, always: honest and practical, human tone, "
+                "evidence-aware, and a doer. These traits are always on "
+                "together — there is nothing to switch."
+            ),
+            font=T.font_main,
             text_color=T.colors["text_dim"],
+            wraplength=260,
+            justify="left",
         ).pack(anchor="w", pady=(4, 0))
-
-    def _set_persona(self, persona):
-        """Set Tommy's persona style."""
-        self.agent.persona_style = persona
-        self.status.configure(text=f"🧑‍💼 Tommy persona set to: {persona}")
-        self._render_settings_panel()
 
     # ---------- helpers ----------
     def _header(self, frame, text):

@@ -183,6 +183,34 @@ class AppState:
         forget_api_key(provider)
         return self.settings()
 
+    def plugins_state(self) -> dict[str, Any]:
+        """Every plugin with its live enabled state, plus presets."""
+        registry = self.agent.plugins
+        enabled = registry.enabled_ids()
+        return {
+            "plugins": [
+                plugin.as_dict(plugin.id in enabled) for plugin in registry.plugins()
+            ],
+            "presets": [
+                {
+                    "id": preset.id,
+                    "name": preset.name,
+                    "description": preset.description,
+                    "plugins": list(preset.plugins),
+                }
+                for preset in registry.presets()
+            ],
+            "enabled": sorted(enabled),
+        }
+
+    def set_plugin(self, plugin_id: str, enabled: bool) -> dict[str, Any]:
+        self.agent.plugins.set_enabled(plugin_id, enabled)
+        return self.plugins_state()
+
+    def apply_plugin_preset(self, preset_id: str) -> dict[str, Any]:
+        self.agent.plugins.apply_preset(preset_id)
+        return self.plugins_state()
+
 
 class Handler(BaseHTTPRequestHandler):
     state: AppState
@@ -253,6 +281,10 @@ class Handler(BaseHTTPRequestHandler):
             if not self._authorised():
                 return self._error(HTTPStatus.FORBIDDEN, "bad token")
             return self._json(self.state.settings())
+        if path == "/api/plugins":
+            if not self._authorised():
+                return self._error(HTTPStatus.FORBIDDEN, "bad token")
+            return self._json(self.state.plugins_state())
         return self._error(HTTPStatus.NOT_FOUND, "not found")
 
     def do_POST(self) -> None:  # noqa: N802
@@ -391,6 +423,14 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/settings/key/delete" and data.get("provider"):
             return self._json(self.state.delete_key(str(data["provider"])))
+
+        if path == "/api/plugins/toggle" and data.get("id"):
+            return self._json(
+                self.state.set_plugin(str(data["id"]), bool(data.get("enabled")))
+            )
+
+        if path == "/api/plugins/preset" and data.get("preset"):
+            return self._json(self.state.apply_plugin_preset(str(data["preset"])))
 
         return self._error(HTTPStatus.NOT_FOUND, "not found")
 

@@ -107,5 +107,19 @@ migration tests (`tests/core/test_migrations.py`) and extend
   read, a project scan, or a document request must never degrade to "I can't".
   `fetch_url` must keep refusing private/loopback hosts (SSRF guard), and file
   operations must stay confined to `cloned_repos`.
+- **Everything is a plugin, and all of them are on.** `app/plugins.py` is the
+  single catalogue of capabilities (`PLUGINS`) and presets (`PRESETS`). Tommy is
+  one persona with every capability enabled by default — the switches are for
+  trimming a task, not for choosing a role. A capability's actions are declared
+  there, shown in Settings → Plugins, persisted as `plugins_enabled` in
+  `config.yaml`, injected into the prompt via `PluginRegistry.prompt_block()`,
+  and enforced by `PluginRegistry.gate()` in `Agent._execute`. When you add a
+  capability, add the plugin manifest *and* the handler; when you add a
+  handler, add the manifest — otherwise the action is unreachable or ungated.
+  The base `SYSTEM_PROMPT` must not document individual actions; the plugin
+  block is the only place they are listed, so disabling one really removes it.
+- **No persona pickers.** Tommy's traits (honest/practical, human tone,
+  evidence-aware, doer) are always on together. Do not reintroduce a switch that
+  makes them exclusive — the old `persona_style` control did nothing.
 - Run the gate before declaring work done; if a test fails, fix the code or the
   test's stale assumption, but never delete or disable tests to make it pass.

@@ -1008,26 +1008,19 @@ def dropdown_items():
         }
     )
 
-    # Tommy persona section
+    # Tommy persona — one combined identity, always on
     items.append(
         {
             "category": "🧑‍💼 TOMMY PERSONA",
             "items": [
                 {
-                    "label": "Honest & Practical Mode",
-                    "value": "persona_honest",
+                    "label": "Tommy — one persona",
+                    "value": "persona_tommy",
                     "kind": "persona",
-                    "description": "Tommy always honest, never fakes, provides evidence/sources",
-                },
-                {
-                    "label": "Human Tone Style",
-                    "value": "persona_human",
-                    "description": "Responses in natural human tone, no AI clichés",
-                },
-                {
-                    "label": "Evidence-Aware",
-                    "value": "persona_evidence",
-                    "description": "Always provides evidence when making factual claims",
+                    "description": (
+                        "Honest and practical, human tone, evidence-aware, and a "
+                        "doer — all at once, always. There is nothing to switch."
+                    ),
                 },
             ],
         }

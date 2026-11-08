@@ -19,6 +19,7 @@ _ALLOWED_YAML_KEYS = {
     "model_mode",
     "cloud_provider",
     "cloud_model",
+    "plugins_enabled",
 }
 _ALLOWED_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
 _ALLOWED_MODEL_MODES = {"local", "cloud", "hybrid"}
@@ -38,6 +39,7 @@ class Settings:
     model_mode: str = "local"
     cloud_provider: str | None = None
     cloud_model: str | None = None
+    plugins_enabled: tuple[str, ...] | None = None
 
 
 def _home(env: Mapping[str, str]) -> Path:
@@ -115,6 +117,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
     model_mode = "local"
     cloud_provider = None
     cloud_model = None
+    plugins_enabled: tuple[str, ...] | None = None
 
     if config_path.exists():
         try:
@@ -157,6 +160,13 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
             if not isinstance(value, str):
                 raise ConfigError("cloud_model must be a string")
             cloud_model = value
+        if "plugins_enabled" in document and document["plugins_enabled"] is not None:
+            value = document["plugins_enabled"]
+            if not isinstance(value, list) or any(
+                not isinstance(item, str) for item in value
+            ):
+                raise ConfigError("plugins_enabled must be a list of plugin ids")
+            plugins_enabled = tuple(value)
 
     env_database_path = source.get("SIGMAHELIX_DB_PATH")
     if env_database_path is not None:
@@ -181,6 +191,7 @@ def load_settings(env: Mapping[str, str] | None = None) -> Settings:
         model_mode,
         cloud_provider,
         cloud_model,
+        plugins_enabled,
     )
 
 
@@ -216,6 +227,35 @@ def save_model_settings(
         document["cloud_model"] = cloud_model
     elif "cloud_model" in document:
         del document["cloud_model"]
+    _validate_no_secrets(document)
+    unknown = set(document) - _ALLOWED_YAML_KEYS
+    if unknown:
+        raise ConfigError(f"unknown configuration keys: {sorted(unknown)}")
+    settings.config_path.parent.mkdir(parents=True, exist_ok=True)
+    settings.config_path.write_text(
+        yaml.safe_dump(document, sort_keys=True), encoding="utf-8"
+    )
+    return load_settings(source)
+
+
+def save_plugin_settings(
+    enabled: list[str], env: Mapping[str, str] | None = None
+) -> Settings:
+    """Persist the set of enabled plugin ids to config.yaml.
+
+    Only the ids are stored; plugin code and permissions live in the app. Other
+    keys (model mode, database path) are preserved.
+    """
+    source = os.environ if env is None else env
+    settings = load_settings(source)
+    document: dict[str, object] = {}
+    if settings.config_path.exists():
+        try:
+            existing = yaml.safe_load(settings.config_path.read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError):
+            existing = {}
+        document = dict(existing) if isinstance(existing, Mapping) else {}
+    document["plugins_enabled"] = sorted({str(item) for item in enabled})
     _validate_no_secrets(document)
     unknown = set(document) - _ALLOWED_YAML_KEYS
     if unknown:

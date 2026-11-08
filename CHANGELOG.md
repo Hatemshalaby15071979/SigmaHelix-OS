@@ -52,6 +52,22 @@ All notable changes to SigmaHelix are recorded here. The format follows
   **Run** link) and can edit its files via file operations — instead of
   apologising that he cannot do it here. If a model reply refuses a build
   request, the refusal is replaced by an actual scaffold.
+- **Everything is a plugin — one Tommy persona, all capabilities on.** Every
+  capability — tasks, question-driven tasks, notes, projects/readiness,
+  workspace files, web access, documents, calendar, launchers, YouTube, skill
+  upload — is a plugin in a registry (`app/plugins.py`), and **all of them are
+  on by default**: Tommy is a single persona with the features of every role,
+  not a menu you must choose from. Settings → **Plugins** lists them with their
+  permissions and a live switch so you can trim one for a specific task, plus
+  a **Reset to full Tommy** button. The enabled set is persisted to
+  `config.yaml` (`plugins_enabled`) and applied to the running agent
+  immediately: the model prompt lists only enabled actions and the dispatcher
+  refuses a disabled one with a pointer to Settings. The base persona no longer
+  hardcodes action docs, so the plugin block is the single source of truth.
+- **The three persona switches are gone.** "Honest & practical", "human tone"
+  and "evidence-aware" were mutually exclusive buttons that never changed the
+  prompt. They are now one always-on identity in both the web UI and the Tk
+  window.
 - **Real agent tools (`app/tools.py`).** Tommy can now `fetch_url` any public
   page and read its text (SSRF-guarded: localhost/private ranges are refused),
   `list`/`read`/`search`/`create`/`modify` any file inside `cloned_repos`

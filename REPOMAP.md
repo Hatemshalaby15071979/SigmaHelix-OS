@@ -38,6 +38,9 @@ SigmaHelix/
 │   │       └── schema.py          Baseline CREATE TABLE statements
 │   ├── app/               Application layer (orchestrates core for the surfaces)
 │   │   ├── agent.py        Tommy: local Ollama first, keyword fallback, cloud
+│   │   ├── plugins.py      Plugin registry: capabilities, presets, prompt + gate
+│   │   ├── tools.py        Real tools: fetch_url (SSRF-guarded), workspace files,
+│   │   │                   project readiness assessment, PDF writer
 │   │   ├── skills.py       SkillLibrary — composes skills into every model prompt
 │   │   ├── planner.py      Turns a task name into project-aware questions
 │   │   ├── service.py      AppService — single doorway UI→core, writes audit

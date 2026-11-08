@@ -31,6 +31,7 @@ without a browser.
 | Launchers | Named argv profiles per project with a whitelisted environment and no shell |
 | Assistant | **Tommy** — local Ollama first, deterministic keyword fallback, optional cloud providers. Always shows its thinking and token usage. Tommy is a real agent with tools: he **visits public URLs and reads them**, **reads/searches/creates/modifies any file in `cloned_repos`**, **assesses every project for production readiness** (readme, tests, CI, container, env template, build, git), **builds runnable projects** (with a Run link), and **writes real PDFs** — instead of refusing. |
 | Skills | Tommy auto-loads a fixed set of skills into every model call (frontend/webapp, UI design, DevOps, prompt engineering, `i-have-adhd` and your personal `Hatem_specific`), so they apply to any model, local or cloud |
+| Plugins | Tommy is **one persona with every capability on** — every feature is a plugin. Settings → **Plugins** lets you trim one off for a specific task (with **Reset to full Tommy**); the enabled set is persisted and Tommy only ever sees the actions you enabled |
 | Reminders | Persisted scheduler, notification inbox, alarm state machine (snooze, dismiss, reschedule) |
 | Audit | Append-only SHA-256 hash chain over every mutation, with verification |
 | Backup | Online SQLite snapshots with a checksum sidecar manifest |
@@ -63,7 +64,7 @@ For development, install into the checkout instead:
 | --- | --- |
 | `~/.local/share/sigmahelix/sigmahelix.db` | The database (mode 0600, WAL, `synchronous=FULL`) |
 | OS keyring (`sigmahelix` service) | Cloud provider API keys, never a file |
-| `~/.config/sigmahelix/config.yaml` | Optional settings: `database_path`, `log_level`, `model_mode` (`local`/`cloud`/`hybrid`), `cloud_provider`, `cloud_model` |
+| `~/.config/sigmahelix/config.yaml` | Optional settings: `database_path`, `log_level`, `model_mode` (`local`/`cloud`/`hybrid`), `cloud_provider`, `cloud_model`, `plugins_enabled` |
 | `~/.local/state/sigmahelix/logs/` | Rotating JSON logs with secret redaction |
 
 Override the data directory with `SIGMAHELIX_DATA_DIR` (this also moves the
