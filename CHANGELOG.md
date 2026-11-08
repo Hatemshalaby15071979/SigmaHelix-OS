@@ -109,6 +109,10 @@ All notable changes to SigmaHelix are recorded here. The format follows
   installs the project's requirements into a project-local `.venv` and retries
   the launch — instead of stopping at "install the project requirements first".
   This only runs in Cloud mode and stays off for Local/Hybrid.
+- **"Install <project> requirements" is a real command.** A deterministic route
+  and a `code` plugin action (`install_requirements`) resolve the project, create
+  its `.venv`, install `requirements.txt`/`pyproject`, and — if the request also
+  says "and run it" — start the app. It never dumps a directory tree.
 - Tasks and notes live in the durable SQLite core. Migration v14 adds
   `pinned`, `display_id` and `recurrence` to tasks and `pinned`/`display_id` to
   notes; existing rows are numbered during the upgrade.

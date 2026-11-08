@@ -126,6 +126,12 @@ migration tests (`tests/core/test_migrations.py`) and extend
   `_loop_enabled()` (Cloud + code plugin), so Local/Hybrid never install
   anything. Never run it outside Cloud mode, and never let it install into a
   project the user did not ask to launch.
+- **"Install <project> requirements" must actually install.** The
+  `install_requirements` action and the deterministic install route
+  (`_handle_install_requirements`) resolve the project and run
+  `coder.install_project_requirements`; if the request also says "and run it",
+  they launch afterwards. Never answer this with a directory listing or the
+  project list — resolve the project and act.
 - **Everything is a plugin, and all of them are on.** `app/plugins.py` is the
   single catalogue of capabilities (`PLUGINS`) and presets (`PRESETS`). Tommy is
   one persona with every capability enabled by default — the switches are for

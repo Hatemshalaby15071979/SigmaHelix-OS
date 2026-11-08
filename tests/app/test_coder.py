@@ -215,6 +215,95 @@ def test_launch_remediates_missing_runtime_in_cloud(workspace, monkeypatch):
     assert calls == ["launch", "launch"]  # failed once, retried after install
 
 
+def test_agent_installs_requirements_and_runs(workspace, monkeypatch):
+    """'install <project> requirements and run it' installs, then launches."""
+    from sigmahelix.app.launchables import Launchable
+
+    project = workspace / "demo"
+    desktop = Launchable(
+        project="demo",
+        kind="desktop",
+        label="python desktop.py",
+        path=project / "desktop.py",
+        command=("python3", "desktop.py"),
+    )
+    monkeypatch.setattr(
+        "sigmahelix.app.launchables.detect_launchables", lambda p: [desktop]
+    )
+    monkeypatch.setattr(
+        "sigmahelix.app.launchables.launch",
+        lambda item, terminal=None: (True, "started python desktop.py"),
+    )
+    monkeypatch.setattr(
+        "sigmahelix.app.coder.install_project_requirements",
+        lambda root, proj, timeout=600: {
+            "ok": True,
+            "venv_py": str(project / ".venv" / "bin" / "python"),
+            "req": "requirements.txt",
+            "steps": [],
+        },
+    )
+
+    agent = agent_module.Agent()
+    agent.model_kind = "cloud"
+    agent.llm_available = False
+
+    reply = agent.process_command(
+        "install the demo project requirements and then run it"
+    )
+    assert "installed" in reply
+    assert "started" in reply
+
+
+def test_agent_installs_requirements_without_running(workspace, monkeypatch):
+    monkeypatch.setattr(
+        "sigmahelix.app.coder.install_project_requirements",
+        lambda root, proj, timeout=600: {
+            "ok": True,
+            "venv_py": str(workspace / "demo" / ".venv" / "bin" / "python"),
+            "req": "requirements.txt",
+            "steps": [],
+        },
+    )
+    agent = agent_module.Agent()
+    agent.model_kind = "cloud"
+    agent.llm_available = False
+
+    reply = agent.process_command("install demo requirements")
+    assert "installed" in reply
+    assert "started" not in reply
+
+
+def test_install_route_ignores_questions(workspace, monkeypatch):
+    """'how do I install packages?' must not become a project install."""
+    called: list[str] = []
+    monkeypatch.setattr(
+        "sigmahelix.app.coder.install_project_requirements",
+        lambda *a, **k: called.append("install") or {"ok": True},
+    )
+    agent = agent_module.Agent()
+    agent.model_kind = "cloud"
+    agent.llm_available = False
+
+    agent.process_command("how do I install python packages?")
+    assert called == []
+
+
+def test_install_route_asks_for_project_when_missing(workspace, monkeypatch):
+    called: list[str] = []
+    monkeypatch.setattr(
+        "sigmahelix.app.coder.install_project_requirements",
+        lambda *a, **k: called.append("install") or {"ok": True},
+    )
+    agent = agent_module.Agent()
+    agent.model_kind = "cloud"
+    agent.llm_available = False
+
+    reply = agent.process_command("install requirements")
+    assert called == []
+    assert "Which project" in reply
+
+
 # ---------------------------------------------------------------------------
 # the loop
 # ---------------------------------------------------------------------------

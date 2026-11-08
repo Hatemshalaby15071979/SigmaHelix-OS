@@ -848,6 +848,8 @@ class Agent:
             return self._handle_run_command(args_text, original_text)
         if action == "edit_file":
             return self._handle_edit_file(args_text, original_text)
+        if action == "install_requirements":
+            return self._handle_install_requirements(args_text, original_text)
         if action == "youtube_summary":
             return self._handle_youtube_summary(args_text, original_text)
         if action == "upload_skills":
@@ -931,6 +933,20 @@ class Agent:
             if not self.plugins.is_enabled("code"):
                 return self.plugins.off_message("code")
             return self._handle_run_tests(self._project_label(text), text)
+        install_verb = re.match(
+            r"^(?:please\s+|tommy[,\s]+|can\s+you\s+|could\s+you\s+|would\s+you\s+)?"
+            r"(?:install|reinstall)\b",
+            (text or "").strip(),
+            re.IGNORECASE,
+        )
+        if (
+            install_verb
+            and any(w in low for w in ("requirement", "dependenc", "deps", "packages"))
+            and classify_intent(text) not in ("task", "note")
+        ):
+            if not self.plugins.is_enabled("code"):
+                return self.plugins.off_message("code")
+            return self._handle_install_requirements("", text)
         verb = re.match(
             r"^(?:please\s+|tommy[,\s]+|can\s+you\s+|could\s+you\s+)?"
             r"(launch|start|bring\s+up|fire\s+up|run|open)\s+(.+)$",
@@ -1342,6 +1358,65 @@ class Agent:
             ),
         }
         return f"{header}\n{summary}"
+
+    @staticmethod
+    def _install_target(text: str) -> str:
+        """Strip install words from a request to leave the project name."""
+        cleaned = re.sub(
+            r"\b(?:tommy|please|install|reinstall|set\s*up|setup|the|its|their|my|"
+            r"for|of|and|then|run|start|launch|it|yourself|"
+            r"project|projects|repo|repository|requirements?|dependencies|deps|"
+            r"packages?|environment|env)\b",
+            " ",
+            text or "",
+            flags=re.IGNORECASE,
+        )
+        return " ".join(cleaned.split())
+
+    def _handle_install_requirements(self, args_text, original_text):
+        """Install a project's declared requirements into its own .venv."""
+        from . import coder
+        from .projects import list_project_dirs
+
+        text = (original_text or args_text or "").strip()
+        label = self._install_target(text) or (args_text or "").strip()
+        if not label:
+            return (
+                "Which project's requirements should I install? "
+                "Name it, e.g. 'install Helix codex requirements'."
+            )
+        project = self._resolve_project(label)
+        if project is None or not project.is_dir():
+            names = list_project_dirs()
+            listed = ", ".join(names[:12]) + (" …" if len(names) > 12 else "")
+            return (
+                f"I couldn't match “{label or text}” to a project. "
+                f"Projects I can see: {listed}.\n"
+                "Say e.g. 'install Helix codex requirements'."
+            )
+        info = coder.install_project_requirements(self._workspace_root(), project)
+        if not info.get("ok"):
+            self.last_trace = {
+                **self.last_trace,
+                "thinking": f"Install for {project.name} failed: {info.get('error')}",
+            }
+            return f"❌ {project.name}: {info.get('error')}"
+        self.last_trace = {
+            **self.last_trace,
+            "thinking": (
+                f"Installed {info.get('req')} into {project.name}/.venv "
+                f"using the project's own interpreter."
+            ),
+        }
+        reply = (
+            f"✅ {project.name}: installed {info.get('req')} into {project.name}/.venv."
+        )
+        # "…and then run it" — start it once the deps are in place.
+        if re.search(r"\b(?:and\s+then\s+)?(?:run|start|launch)\b", text, re.I):
+            handled = self._handle_launch(project.name, text, silent=False)
+            if handled:
+                reply += f"\n{handled}"
+        return reply
 
     def _handle_run_command(self, args_text, original_text):
         """Run one real command inside the workspace."""

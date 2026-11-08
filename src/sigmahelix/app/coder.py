@@ -760,11 +760,13 @@ def install_project_requirements(
                 "steps": steps,
             }
 
-    pip = str(venv_dir / "bin" / "pip")
+    # Use the interpreter's pip module, not the `pip` shim: a partially-created
+    # venv can lack the shim while still having pip available as a module.
+    pip = [str(venv_py), "-m", "pip"]
     if req.name == "requirements.txt":
-        argv = [pip, "install", "-r", str(req)]
+        argv = [*pip, "install", "-r", str(req)]
     elif req.name in ("pyproject.toml", "setup.py", "setup.cfg"):
-        argv = [pip, "install", "."]
+        argv = [*pip, "install", "."]
     elif req.name == "Pipfile":
         argv = [str(venv_dir / "bin" / "pipenv"), "install"]
     else:  # environment.yml and anything else we cannot safely install

@@ -218,6 +218,12 @@ PLUGINS: tuple[Plugin, ...] = (
                 'content = JSON {"path":"<file>","old":"<exact text>",'
                 '"new":"<new text>"} — replaces exact text in a workspace file.',
             ),
+            ActionSpec(
+                "install_requirements",
+                "content = a project name. Creates the project's .venv and "
+                "installs its requirements.txt/pyproject so it can run. Use this "
+                "when a launch or test fails for a missing dependency.",
+            ),
         ),
         permissions=("run commands inside the workspace", "edit workspace files"),
     ),
