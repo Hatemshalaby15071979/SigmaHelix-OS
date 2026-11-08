@@ -96,6 +96,14 @@ All notable changes to SigmaHelix are recorded here. The format follows
   library. These routes are deterministic, so "scan my projects", "which project
   is production ready?", "read <url>" and "create a resume PDF" work even when
   the model would otherwise answer "I can't".
+- **Tommy is a real coding agent in Cloud mode.** A new `code` plugin exposes
+  `audit_repo`, `run_tests`, `run_command` and `edit_file`, backed by
+  `app/coder.py` (no shell, workspace-confined, destructive-command deny-list,
+  test-runner detection, exact search/replace edits). In Cloud mode Tommy runs a
+  bounded multi-step loop: he audits the repo, reads real test output, edits the
+  code, runs the tests again, and reports what changed and what still fails —
+  a list of file names is never the answer to "fix this". Local and Hybrid modes
+  keep the prior single-shot behaviour.
 - Tasks and notes live in the durable SQLite core. Migration v14 adds
   `pinned`, `display_id` and `recurrence` to tasks and `pinned`/`display_id` to
   notes; existing rows are numbered during the upgrade.

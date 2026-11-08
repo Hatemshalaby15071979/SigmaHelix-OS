@@ -1407,7 +1407,9 @@ class SigmaHelixApp:
             text="▶ Study Studio",
             height=40,
             font=T.font_btn,
-            command=lambda: self.react(self.agent.launcher.launch_study_studio("x")),
+            command=lambda: self.react(
+                self.agent.launcher.launch_project("Study Studio")
+            ),
         ).pack(side="left", padx=(0, 8))
         ctk.CTkButton(
             row,
@@ -1415,7 +1417,7 @@ class SigmaHelixApp:
             height=40,
             font=T.font_btn,
             command=lambda: self.react(
-                self.agent.launcher.launch_ld_command_center("x")
+                self.agent.launcher.launch_project("L-D Command Center")
             ),
         ).pack(side="left", padx=(0, 8))
         ctk.CTkButton(

@@ -130,47 +130,55 @@ def _normalise(text: str) -> str:
     return "".join(ch for ch in text.lower() if ch.isalnum())
 
 
+def _tokens(text: str) -> list[str]:
+    return [part for part in re.split(r"[^a-z0-9]+", text.lower()) if part]
+
+
 def match_projects(query: str, root: str | None = None) -> list[str]:
     """Rank real project names against a free-text query, best first.
 
-    Matching is deliberately forgiving — the user types "launch Helix codex app"
-    and means ``Helix-Codex``. It never invents a name: only names that exist in
-    the projects directory come back.
+    Matching works on words, not characters: "launch Helix codex app" means
+    ``Helix-Codex`` and "the helix codex app as it did not run" does not become
+    a different project. It never invents a name: only directories that exist
+    in the projects folder come back.
     """
     names = list_project_dirs(root)
     if not names:
         return []
-    words = query.lower().replace("-", " ").replace("_", " ").split()
+    words = list(_tokens(query.replace("-", " ").replace("_", " ")))
     words = [w for w in words if w not in _STOP_WORDS and len(w) > 1]
-    cleaned = " ".join(words)
-    needle = _normalise(cleaned)
-    if not needle:
+    if not words:
         return []
+    query_tokens = list(dict.fromkeys(words))
+    needle = _normalise(" ".join(query_tokens))
+    name_tokens = {name: _tokens(name) for name in names}
 
-    normalised = {name: _normalise(name) for name in names}
-
-    exact = [name for name, norm in normalised.items() if norm == needle]
+    exact = [name for name in names if _normalise(name) == needle]
     if exact:
         return sorted(exact)
 
-    contained = [
+    # The query names the project: every query word appears in the name.
+    subset = [
         name
-        for name, norm in normalised.items()
-        if len(norm) >= 3 and (needle in norm or norm in needle)
+        for name in names
+        if all(word in name_tokens[name] for word in query_tokens)
     ]
-    if contained:
-        return sorted(
-            contained, key=lambda n: (abs(len(normalised[n]) - len(needle)), n)
-        )
+    if subset:
+        return sorted(subset, key=lambda n: (len(name_tokens[n]), n))
 
-    # Token overlap: "blue waves music" -> Blue Waves Music Production.
-    tokens = {w for w in words if len(w) > 2}
+    # The project name is a prefix of what the user said.
+    superset = [
+        name
+        for name in names
+        if name_tokens[name] and all(word in query_tokens for word in name_tokens[name])
+    ]
+    if superset:
+        return sorted(superset, key=lambda n: (len(name_tokens[n]), n))
+
+    # Shared words: "blue waves music" -> Blue Waves Music Production.
     scored: list[tuple[int, str]] = []
-    for name in normalised:
-        name_tokens = {
-            part for part in re.split(r"[^a-z0-9]+", name.lower()) if len(part) > 2
-        }
-        hits = len(tokens & name_tokens)
+    for name in names:
+        hits = len(set(query_tokens) & set(name_tokens[name]))
         if hits:
             scored.append((hits, name))
     if scored:
@@ -178,6 +186,6 @@ def match_projects(query: str, root: str | None = None) -> list[str]:
         return sorted(name for hits, name in scored if hits == best)
 
     close = difflib.get_close_matches(
-        needle, list(normalised.values()), n=3, cutoff=0.6
+        needle, [_normalise(name) for name in names], n=3, cutoff=0.6
     )
-    return [name for name, norm in normalised.items() if norm in close]
+    return [name for name in names if _normalise(name) in close]

@@ -100,6 +100,36 @@ def classify_intent(text):
     return None
 
 
+# An audit request targets a project/repo, not a task title. "create task audit"
+# must NOT be hijacked into a repo audit, so the match requires the verb to be
+# imperative (at the start) or glued to a project/repo noun.
+_AUDIT_COMMAND = re.compile(
+    r"^(?:please\s+|tommy[,\s]+|can\s+you\s+|could\s+you\s+|would\s+you\s+|"
+    r"i\s+want\s+you\s+to\s+|i\s+need\s+you\s+to\s+)?"
+    r"(?:do\s+|run\s+|perform\s+|carry\s+out\s+|start\s+)?"
+    r"(?:an?\s+|the\s+)?"
+    r"(?:code\s+|repo(?:sitory)?\s+|project\s+|codebase\s+)?audits?\b",
+    re.IGNORECASE,
+)
+_AUDIT_NOUN = re.compile(
+    r"\b(?:repo(?:sitory)?|project|code|codebase|source|app|workspace|folder|"
+    r"directory|suite|tests?)\s+audits?\b",
+    re.IGNORECASE,
+)
+
+
+def _is_audit_request(text):
+    """True only when the user is asking for a repo/project audit."""
+    if not text:
+        return False
+    if not (_AUDIT_COMMAND.match(text) or _AUDIT_NOUN.search(text)):
+        return False
+    # A task/note capture like "create task to audit the project" stays a
+    # capture, never a repo audit — unless it literally starts with "audit".
+    is_capture = classify_intent(text) in ("task", "note")
+    return not (is_capture and not _AUDIT_COMMAND.match(text))
+
+
 # ---------------------------------------------------------------------------
 # agenda intent
 #
@@ -176,6 +206,10 @@ RULES:
 - You are a DOER. When the user asks you to build, create, or make anything on
   disk, use the create/write actions in ENABLED TOOLS — never say you cannot do
   it here.
+- For engineering work you act like a coding agent: audit the project, run its
+  tests, read the real failures, edit the code, run the tests again, then
+  report what you changed and what still fails. A list of file names is never
+  an answer to "fix this" — read the code, change it, and verify.
 - Tasks are question-driven. A task is only "ready" once every sub-question has
   an answer with evidence. The task-question actions are real; use them.
 - Decide NOTE vs TASK by what the user wants, not by which words appear:
@@ -271,9 +305,32 @@ class Agent:
         provider can never drop the user's rules.
         """
         base = SYSTEM_PROMPT + self.capability_block() + self.plugins.prompt_block()
+        loop = self.loop_block()
+        if loop:
+            # Appended after rstrip so the loop block is the only difference
+            # between the local and cloud prompts.
+            base = base.rstrip() + loop
         composition = self.skills.compose(base)
         self.last_composition = composition
         return composition.prompt
+
+    def loop_block(self) -> str:
+        """The work-loop contract — only present when the loop actually runs."""
+        if not self._loop_enabled():
+            return ""
+        return (
+            "\n\n## WORK LOOP (cloud mode)\n"
+            "You are working inside a tool loop. Every action you choose runs\n"
+            "for real and its output comes back to you as the next turn.\n"
+            "- Work the task step by step: audit, run the tests, read the\n"
+            "  failing code, edit it, run the tests again.\n"
+            "- Use only the ENABLED TOOLS listed above; their arguments are\n"
+            "  given there.\n"
+            "- When the task is done (or blocked), answer with\n"
+            '  {"action":"final","content":"","reply":"<what you did, what still '
+            'fails>"}.\n'
+            "- Never claim a fix you did not verify with a test run."
+        )
 
     def _build_messages(self, user_text):
         messages = [{"role": "system", "content": self.system_prompt()}]
@@ -518,16 +575,100 @@ class Agent:
                 trace=trace,
             )
             if reply:
-                self.last_trace = trace
+                self.last_trace = {**self.last_trace, **trace}
                 return reply, None
             last_err = err or "empty reply"
         return None, last_err
+
+    # ---- the agent loop (cloud mode) --------------------------------------
+    #: How many tool steps one request may take.
+    MAX_AGENT_STEPS = 16
+
+    #: How much of each tool result goes back to the model.
+    MAX_OBSERVATION_CHARS = 4000
+
+    #: Actions that end the loop.
+    _FINAL_ACTIONS = ("final", "done", "answer", "chat", "help")
+
+    def _loop_enabled(self) -> bool:
+        """The multi-step loop runs in cloud mode with the code tools on."""
+        return self.model_kind == "cloud" and self.plugins.is_enabled("code")
+
+    def _next_model_reply(self, messages: list[dict[str, Any]]) -> str:
+        """One model call through the configured backend."""
+        if self.model_kind in ("cloud", "hybrid"):
+            reply, _ = self._cloud_chat(messages)
+            if reply:
+                return str(reply)
+            if self.model_kind == "cloud":
+                # cloud-only mode must not silently fall back to the local model
+                return ""
+        return str(self._ollama_chat(messages) or "")
+
+    def _agent_loop(self, messages: list[dict[str, Any]], user_text: str) -> str:
+        """Let the model use tools until it can answer with evidence.
+
+        Every tool result is fed back as the next turn, so a request like
+        "audit this repo, run its tests and fix what fails" becomes a real
+        multi-step session instead of one optimistic reply.
+        """
+        steps: list[str] = []
+        observation = ""
+        for _ in range(self.MAX_AGENT_STEPS):
+            content = self._next_model_reply(messages)
+            if not content:
+                if observation:
+                    break
+                return str(self._keyword_route(user_text))
+
+            data = self._parse_json(content)
+            if data is None:
+                # The model answered in prose — that is the final answer.
+                return f"🤖 {content}"
+
+            action = (data.get("action") or "help").strip()
+            args_text = (data.get("content") or "").strip()
+            reply = (data.get("reply") or "").strip()
+
+            if action in self._FINAL_ACTIONS:
+                self.last_trace["steps"] = steps
+                self._remember("user", user_text)
+                self._remember("assistant", reply or observation)
+                return reply or observation or "Done."
+
+            executed = self._execute(action, args_text, user_text)
+            observation = executed
+            steps.append(
+                f"{action}: {executed.splitlines()[0][:120] if executed else 'no output'}"
+            )
+            messages.append({"role": "assistant", "content": content[:1500]})
+            messages.append(
+                {
+                    "role": "user",
+                    "content": (
+                        f"TOOL RESULT [{action}]:\n"
+                        f"{executed[: self.MAX_OBSERVATION_CHARS]}\n\n"
+                        "Continue with the next step using a tool, or answer with "
+                        '{"action":"final","content":"","reply":"<the answer>"}.'
+                    ),
+                }
+            )
+
+        self.last_trace["steps"] = steps
+        self._remember("user", user_text)
+        self._remember("assistant", observation)
+        return observation or "I ran out of steps before reaching an answer."
 
     def _llm_roundtrip(self, user_text):
         """One LLM turn: intent JSON -> execute -> maybe speak/natural reply."""
         with self._llm_lock:
             try:
                 messages = self._build_messages(user_text)
+
+                # Cloud mode runs the full agent loop: the model keeps calling
+                # tools until it can answer with evidence.
+                if self._loop_enabled():
+                    return self._agent_loop(messages, user_text)
 
                 # ---- pick a backend from the selected mode ----
                 content = None
@@ -699,6 +840,14 @@ class Agent:
             return self._handle_create_document(args_text, original_text)
         if action == "file_operations":
             return self._handle_file_operations(args_text, original_text)
+        if action == "audit_repo":
+            return self._handle_audit_repo(args_text, original_text)
+        if action == "run_tests":
+            return self._handle_run_tests(args_text, original_text)
+        if action == "run_command":
+            return self._handle_run_command(args_text, original_text)
+        if action == "edit_file":
+            return self._handle_edit_file(args_text, original_text)
         if action == "youtube_summary":
             return self._handle_youtube_summary(args_text, original_text)
         if action == "upload_skills":
@@ -766,6 +915,22 @@ class Agent:
             if not self.plugins.is_enabled("web"):
                 return self.plugins.off_message("web")
             return self._handle_fetch_url(url.group(0), text)
+        if re.search(
+            r"\b(?:run|execute|rerun)\s+(?:the\s+|its\s+|their\s+|all\s+)?"
+            r"tests?\b",
+            low,
+        ) and not (
+            classify_intent(text) in ("task", "note")
+            and not re.match(
+                r"^(?:please\s+|tommy[,\s]+|can\s+you\s+|could\s+you\s+)?"
+                r"(?:run|execute|rerun)\b",
+                text,
+                re.IGNORECASE,
+            )
+        ):
+            if not self.plugins.is_enabled("code"):
+                return self.plugins.off_message("code")
+            return self._handle_run_tests(self._project_label(text), text)
         verb = re.match(
             r"^(?:please\s+|tommy[,\s]+|can\s+you\s+|could\s+you\s+)?"
             r"(launch|start|bring\s+up|fire\s+up|run|open)\s+(.+)$",
@@ -779,14 +944,15 @@ class Agent:
             handled = self._handle_launch(text, text, silent=not loud)
             if handled is not None:
                 return handled
+        if _is_audit_request(text):
+            if not self.plugins.is_enabled("code"):
+                return self.plugins.off_message("code")
+            return self._handle_audit_repo("", text)
         if (
             "production ready" in low
             or "production-readiness" in low
             or "production readiness" in low
-            or (
-                any(word in low for word in ("assess", "audit", "scan"))
-                and "project" in low
-            )
+            or (any(word in low for word in ("assess", "scan")) and "project" in low)
         ):
             if not self.plugins.is_enabled("projects"):
                 return self.plugins.off_message("projects")
@@ -1051,6 +1217,211 @@ class Agent:
         from .paths import projects_dir
 
         return projects_dir()
+
+    def _resolve_project(self, name: str):
+        """Resolve a project reference inside the workspace, or None."""
+        from .paths import projects_dir
+        from .projects import match_projects
+        from .security import confine_to_root
+
+        root = projects_dir()
+        label = (name or "").strip()
+        if not label:
+            return root
+        try:
+            candidate = confine_to_root(root, label)
+        except ValueError:
+            candidate = None
+        if candidate is not None and candidate.is_dir():
+            return candidate
+        matches = match_projects(label)
+        if matches:
+            return root / matches[0]
+        return None
+
+    def _project_label(self, text: str) -> str:
+        """The project a free-text request is about, or '' when unclear."""
+        from .projects import match_projects
+
+        cleaned = re.sub(
+            r"\b(?:audit|run|execute|the|its|their|my|please|and|for|all|"
+            r"tests?|testing|test-suite|project|projects|repo|repository|"
+            r"codebase|code|fix|check|start|startup|of|in|on)\b",
+            " ",
+            text or "",
+            flags=re.IGNORECASE,
+        )
+        matches = match_projects(cleaned)
+        return matches[0] if len(matches) == 1 else ""
+
+    def _handle_audit_repo(self, args_text, original_text):
+        """Audit a repository: structure, dependencies, tests, CI and gaps."""
+        from . import coder
+        from .projects import list_project_dirs, match_projects
+
+        label = (args_text or "").strip().strip('"').strip("'")
+        if not label:
+            cleaned = re.sub(
+                r"\b(?:audit|my|the|this|that|project|projects|repo|repository|"
+                r"codebase|code|please|and)\b",
+                " ",
+                original_text or "",
+                flags=re.IGNORECASE,
+            )
+            candidates = match_projects(cleaned)
+            if len(candidates) == 1:
+                label = candidates[0]
+            elif len(candidates) > 1:
+                return "Which project? " + " · ".join(candidates)
+            elif cleaned.strip():
+                # a specific project was named but it does not exist
+                return (
+                    f"❌ No project matches '{cleaned.strip()}'. "
+                    "Give the project folder name."
+                )
+
+        if not label:
+            # "audit my projects" — every project in the workspace.
+            names = list_project_dirs()
+            if not names:
+                return "❌ No projects found in the workspace."
+            lines = ["📋 AUDIT — workspace", ""]
+            for name in names:
+                audit = coder.audit_repo(self._workspace_root() / name)
+                gaps = ", ".join(audit["gaps"]) or "no gaps found"
+                lines.append(
+                    f"• {name}: {audit['files']} files, {audit['test_files']} test "
+                    f"files, runner "
+                    f"{(audit['test_runner'] or {}).get('runner', 'none')} — {gaps}"
+                )
+            self.last_trace = {
+                **self.last_trace,
+                "thinking": f"Audited {len(names)} projects in the workspace.",
+            }
+            return "\n".join(lines)
+
+        project = self._resolve_project(label)
+        if project is None:
+            return f"❌ No project matches '{label}'. Give the project folder name."
+        audit = coder.audit_repo(project)
+        self.last_trace = {
+            **self.last_trace,
+            "thinking": (
+                f"Audited {project.name}: {audit['files']} files, "
+                f"{audit['test_files']} test files, gaps: "
+                f"{', '.join(audit['gaps']) or 'none'}."
+            ),
+        }
+        return coder.format_audit(audit)
+
+    def _handle_run_tests(self, args_text, original_text):
+        """Run a project's real test suite and report the failures."""
+        from . import coder
+
+        label = (args_text or "").strip().strip('"').strip("'")
+        root = self._workspace_root()
+        project = self._resolve_project(label)
+        if project is None:
+            return f"❌ No project matches '{label or '(empty)'}'."
+        outcome = coder.run_tests(root, project)
+        if not outcome.get("ok") and outcome.get("error"):
+            return f"❌ {outcome['error']}"
+        failures = outcome.get("failures") or []
+        header = (
+            f"🧪 {project.name}: `{outcome['argv']}` → exit {outcome['exit_code']} "
+            f"({outcome.get('runner')})"
+        )
+        if failures:
+            header += f"\n{len(failures)} failing line(s):\n" + "\n".join(failures)
+        summary = outcome.get("summary") or ""
+        self.last_trace = {
+            **self.last_trace,
+            "thinking": (
+                f"Ran {outcome.get('argv')} in {project.name}: exit "
+                f"{outcome.get('exit_code')}, {len(failures)} failure line(s)."
+            ),
+        }
+        return f"{header}\n{summary}"
+
+    def _handle_run_command(self, args_text, original_text):
+        """Run one real command inside the workspace."""
+        import json
+
+        from . import coder
+
+        text = (args_text or "").strip()
+        payload: dict[str, Any] = {}
+        if text.startswith("{"):
+            try:
+                payload = json.loads(text)
+            except json.JSONDecodeError:
+                return "❌ Invalid JSON for run_command."
+        else:
+            payload = {"command": text.split()} if text else {}
+        argv = payload.get("command") or []
+        if isinstance(argv, str):
+            argv = argv.split()
+        argv = [str(part) for part in argv if str(part)]
+        if not argv:
+            return (
+                '❌ Give the command as JSON: {"command":["pytest","-q"],'
+                '"cwd":"<project>"}'
+            )
+        cwd = str(payload.get("cwd") or "").strip()
+        timeout = int(payload.get("timeout") or 120)
+        root = self._workspace_root()
+        if cwd:
+            project = self._resolve_project(cwd)
+            if project is None:
+                return f"❌ No project matches '{cwd}'."
+            cwd = str(project.relative_to(root))
+        result = coder.run_command(root, argv, cwd=cwd, timeout=timeout)
+        self.last_trace = {
+            **self.last_trace,
+            "thinking": (
+                f"Ran {' '.join(argv)} in {cwd or 'the workspace'}: exit "
+                f"{result.exit_code}"
+                + (f", {result.error}" if result.error else "")
+                + "."
+            ),
+        }
+        return coder.format_command_result(result)
+
+    def _handle_edit_file(self, args_text, original_text):
+        """Replace exact text in a workspace file."""
+        import json
+
+        from . import coder
+
+        text = (args_text or "").strip()
+        if not text.startswith("{"):
+            return (
+                '❌ Give the edit as JSON: {"path":"<file>","old":"<exact text>",'
+                '"new":"<new text>"}'
+            )
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError:
+            return "❌ Invalid JSON for edit_file."
+        path = str(payload.get("path") or "").strip()
+        old = str(payload.get("old") or "")
+        new = str(payload.get("new") or "")
+        if not path:
+            return "❌ edit_file needs a path."
+        outcome = coder.edit_file(
+            self._workspace_root(),
+            path,
+            old,
+            new,
+            replace_all=bool(payload.get("replace_all")),
+        )
+        if not outcome.get("ok"):
+            return f"❌ {outcome.get('error')}"
+        self.last_trace = {
+            **self.last_trace,
+            "thinking": f"Edited {path} ({outcome['replacements']} replacement(s)).",
+        }
+        return f"✏️ Edited {path} ({outcome['replacements']} replacement(s))"
 
     def _handle_file_operations(self, args_text, original_text):
         """List, read, search, create or modify files in the workspace.
@@ -1527,18 +1898,22 @@ class Agent:
             if off := self._off("projects"):
                 return off
             return self.projects.list_projects(text)
-        if "launch" in text or "open" in text or re.search(r"\brun\b", text):
+        launch_verb = re.match(
+            r"^(?:please\s+|tommy[,\s]+|can\s+you\s+|could\s+you\s+)?"
+            r"(?:launch|run|start|open|bring\s+up|fire\s+up)\b",
+            original,
+            re.IGNORECASE,
+        )
+        if launch_verb:
             if off := self._off("launch"):
                 return off
-            explicit = bool(
-                re.match(
-                    r"^(?:please\s+|tommy[,\s]+)?"
-                    r"(?:launch|run|start|open|bring\s+up|fire\s+up)\b",
-                    original,
-                    re.IGNORECASE,
-                )
+            loud = launch_verb.group(0).strip().lower() in (
+                "launch",
+                "start",
+                "bring up",
+                "fire up",
             )
-            handled = self._handle_launch(original, original, silent=not explicit)
+            handled = self._handle_launch(original, original, silent=not loud)
             if handled is not None:
                 return handled
 

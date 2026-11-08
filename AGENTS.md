@@ -107,6 +107,17 @@ migration tests (`tests/core/test_migrations.py`) and extend
   read, a project scan, or a document request must never degrade to "I can't".
   `fetch_url` must keep refusing private/loopback hosts (SSRF guard), and file
   operations must stay confined to `cloned_repos`.
+- **The `code` plugin makes Tommy a real coding agent — only in Cloud mode.**
+  `app/coder.py` holds `run_command`/`run_tests`/`audit_repo`/`edit_file`
+  (no shell, workspace-confined, destructive-command deny-list, exact
+  search/replace edits). In Cloud mode the agent runs a bounded multi-step loop
+  (`Agent._agent_loop`): audit the repo → run its tests → read the real failures
+  → edit the code → run again → report what changed and what still fails. A list
+  of file names is never the answer to "fix this". Keep Local/Hybrid modes on the
+  single-shot path; never make the loop run outside Cloud mode, and never let a
+  disabled `code` plugin act. The loop prompt block is injected only in Cloud
+  mode (`Agent.loop_block()`), so `system_prompt()` must reproduce the local
+  prompt exactly when the loop is off.
 - **Everything is a plugin, and all of them are on.** `app/plugins.py` is the
   single catalogue of capabilities (`PLUGINS`) and presets (`PRESETS`). Tommy is
   one persona with every capability enabled by default — the switches are for

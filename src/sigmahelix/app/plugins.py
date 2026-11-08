@@ -191,6 +191,37 @@ PLUGINS: tuple[Plugin, ...] = (
         permissions=("read/write inside cloned_repos",),
     ),
     Plugin(
+        "code",
+        "Code agent",
+        "Audit a repository, run its tests and commands, edit its files.",
+        "engineering",
+        (
+            ActionSpec(
+                "audit_repo",
+                'content = a project name (or "" for the whole workspace). '
+                "Reports structure, dependencies, tests, CI, lint config and "
+                "the gaps between them.",
+            ),
+            ActionSpec(
+                "run_tests",
+                "content = a project name. Detects the project's real test "
+                "runner, runs it, and returns the failures with their output.",
+            ),
+            ActionSpec(
+                "run_command",
+                'content = JSON {"command":["pytest","-q"],'
+                '"cwd":"<project folder>"} — runs a real command inside the '
+                "workspace and returns its exit code and output.",
+            ),
+            ActionSpec(
+                "edit_file",
+                'content = JSON {"path":"<file>","old":"<exact text>",'
+                '"new":"<new text>"} — replaces exact text in a workspace file.',
+            ),
+        ),
+        permissions=("run commands inside the workspace", "edit workspace files"),
+    ),
+    Plugin(
         "web",
         "Web access",
         "Visit public pages and read their text; search the web.",

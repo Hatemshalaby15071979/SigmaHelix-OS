@@ -181,11 +181,11 @@ def test_voice_lazy_init_no_mic_crash(offline_agent):
 # ---------------- launcher (no subprocess run; verify path guards) ----------------
 
 
-def test_launcher_missing_path_reports(tmp_path):
+def test_launcher_missing_project_reports(tmp_path, monkeypatch):
     launcher = LauncherManager()
-    launcher.study_studio_path = str(tmp_path / "nope")
-    out = launcher.launch_study_studio("launch study studio")
-    assert "not found" in out.lower()
+    monkeypatch.setattr(launcher, "projects_dir", str(tmp_path))
+    out = launcher.launch_project("nope")
+    assert "no project matches" in out.lower()
 
 
 # ---------------- TTS discipline: NEVER automatic, always on demand ----------------

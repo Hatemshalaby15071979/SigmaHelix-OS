@@ -706,43 +706,40 @@ class CalendarManager:
 
 
 class LauncherManager:
+    """Starts any project that really has an interface.
+
+    There is no fixed list of apps here: the name is resolved against the
+    projects on disk and the command comes from what the project contains.
+    """
+
     def __init__(self):
-        root = _projects_dir()
-        self.study_studio_path = str(root / "Study-Studio")
-        self.ld_command_center_path = str(root / "L-D-Command-Center")
+        self.projects_dir = str(_projects_dir())
 
-    def launch_study_studio(self, text):
-        """Launch Study Studio application."""
-        import os
-        import subprocess
+    def launch_project(self, name: str) -> str:
+        """Resolve a project by name and start its best entry point."""
+        from pathlib import Path
 
-        if not os.path.exists(self.study_studio_path):
-            return f"Study Studio not found at {self.study_studio_path}."
+        from .launchables import Launchable, detect_launchables, index_html, launch
+        from .projects import match_projects
 
-        try:
-            # Try to launch using python
-            subprocess.Popen(
-                ["python", "-m", "streamlit", "run", "app.py"],
-                cwd=self.study_studio_path,
+        matches = match_projects(name)
+        if not matches:
+            return f"No project matches '{name}'."
+        project = Path(self.projects_dir) / matches[0]
+        items = detect_launchables(project)
+        if items:
+            _, message = launch(items[0])
+            return message
+        page = index_html(project)
+        if page is not None:
+            _, message = launch(
+                Launchable(
+                    project=matches[0],
+                    kind="dashboard",
+                    label=page.name,
+                    path=page,
+                    command=("xdg-open", str(page)),
+                )
             )
-            return "Launching Study Studio..."
-        except Exception as e:
-            return f"Failed to launch Study Studio: {str(e)}"
-
-    def launch_ld_command_center(self, text):
-        """Launch L-D Command Center application."""
-        import os
-        import subprocess
-
-        if not os.path.exists(self.ld_command_center_path):
-            return f"L-D Command Center not found at {self.ld_command_center_path}."
-
-        try:
-            # Try to launch using streamlit
-            subprocess.Popen(
-                ["python", "-m", "streamlit", "run", "main.py"],
-                cwd=self.ld_command_center_path,
-            )
-            return "Launching L-D Command Center..."
-        except Exception as e:
-            return f"Failed to launch L-D Command Center: {str(e)}"
+            return message
+        return f"'{matches[0]}' has no interface I can start."

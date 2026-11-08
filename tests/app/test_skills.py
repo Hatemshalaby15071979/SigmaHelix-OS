@@ -161,12 +161,20 @@ def test_cloud_payload_carries_every_skill(offline_agent, monkeypatch):
 
 
 def test_switching_provider_does_not_change_the_system_prompt(offline_agent):
-    """The guarantee is provider-independent: one prompt builder, two backends."""
+    """The persona and skills are provider-independent; the work loop is not.
+
+    Cloud mode runs a multi-step tool loop, so only cloud gets the loop
+    contract — everything else about the prompt stays identical.
+    """
     prompt_local = offline_agent.system_prompt()
     offline_agent.model_kind = "cloud"
     offline_agent.cloud_provider = "openai"
     prompt_cloud = offline_agent.system_prompt()
-    assert prompt_local == prompt_cloud
+    assert "WORK LOOP" not in prompt_local
+    assert "WORK LOOP" in prompt_cloud
+    assert prompt_cloud.replace(offline_agent.loop_block(), "").strip() == (
+        prompt_local.strip()
+    )
 
 
 def test_enabled_capabilities_join_the_prompt(offline_agent):
