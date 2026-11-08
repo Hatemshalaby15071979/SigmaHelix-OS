@@ -13,6 +13,8 @@ Agent — LLM-first Tommy (Ollama) with deterministic keyword fallback.
   keyword router so the app is always usable offline.
 """
 
+from __future__ import annotations
+
 import json
 import os
 import re
