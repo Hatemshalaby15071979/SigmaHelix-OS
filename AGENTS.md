@@ -9,6 +9,12 @@ backup, plus an assistant named **Tommy** that runs on the user's machine. The
 primary UI is a **loopback-only web app** (`sigmahelix`, opens in the browser);
 `sigmahelix --desktop` is the legacy Tk window, `sigmahelix chat` is the console.
 
+**This repository is the Hub.** SigmaHelix is the single surface its founder
+(**Hatem Shalaby**) uses to dynamically monitor and modify his other projects
+(under `cloned_repos/`) and to plan his daily tasks from their real state. Treat
+`cloned_repos` as live projects to scan, read, assess and build in — not as
+decorative examples.
+
 ## Start here
 
 - **Product/what it does**: `README.md`

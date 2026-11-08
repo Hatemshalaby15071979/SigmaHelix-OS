@@ -8,6 +8,11 @@ All notable changes to SigmaHelix are recorded here. The format follows
 
 ### Added
 
+- **Documentation: SigmaHelix as the Hub.** `README.md` and `AGENTS.md` now state
+  plainly that this repository is the founder's control centre — the one surface
+  Hatem Shalaby uses to monitor and modify his other projects (`cloned_repos/`)
+  and to plan his daily tasks — and why those projects live here.
+
 - **`cloud_replay_history` setting** (default `false`). Past turns are replayed
   into the prompt by the local model only; sending them to a cloud provider
   needs the founder's explicit opt-in.

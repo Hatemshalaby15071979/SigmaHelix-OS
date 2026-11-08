@@ -3,6 +3,12 @@
 A local-first personal operating system: tasks, notes, projects, calendar,
 launchers, and an assistant that runs on your own machine.
 
+**SigmaHelix is the Hub.** It is the one place its founder, **Hatem Shalaby**,
+directs his working life from. It is not a single app among many: it dynamically
+**monitors and modifies the other projects on his machine** and **plans his daily
+tasks** from their real state, so the founder steers everything from one surface
+instead of juggling repositories by hand.
+
 Everything lives in one SQLite file under your home directory. There is no
 account, no sync service, and no telemetry. Cloud models are available but
 **off by default**; when you enable one, the key is stored in your operating
@@ -19,6 +25,22 @@ The web interface is the primary surface. It is served on loopback only and
 every API call needs a per-session token embedded in the page, so no other
 process on the machine can drive it. The Tk window is kept for environments
 without a browser.
+
+## The Hub
+
+This repository is the control centre, not one project among many.
+
+- **Who** — the founder is **Hatem Shalaby**. Tommy is the assistant that lives
+  inside SigmaHelix; the founder is the human who owns every decision.
+- **Why this is here** — to be the single surface that watches the founder's
+  other projects, understands what each one is for, and acts on them (reads code,
+  runs tests, proposes changes) on his behalf, while keeping an append-only,
+  hash-proven record of everything that happened so nothing is invisible.
+- **Why the other projects are here** — `cloned_repos/` holds the founder's
+  other projects. They are not decoration: SigmaHelix scans them on every run,
+  scores their health, and Tommy reads, assesses and builds inside them. The
+  metacognition ledger records what he did, so the founder can always see and
+  verify it.
 
 ## What it does
 
