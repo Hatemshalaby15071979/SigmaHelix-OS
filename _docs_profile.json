@@ -1,0 +1,13 @@
+{
+  "name": "SigmaHelix",
+  "repo": "Hatemshalaby15071979/SigmaHelix",
+  "status_template": "**Released: @DOCS_SYNC_VERSION@.** The durable core, the desktop app, the web UI and the CLI are complete and tested — @DOCS_SYNC_TESTS@ automated tests pass and the code is @DOCS_SYNC_COVERAGE@% covered. Each `v*` tag publishes a built wheel and sdist automatically via the **Release** workflow (see the GitHub **Releases** page). The full gate — format, lint, types, compile, tests and CLI smoke — runs in CI on every push; see `docs/execution/LEDGER.yaml` for the gate history.",
+  "status_template_html": "<p class=\"status\"><strong>Released @DOCS_SYNC_VERSION@.</strong> The durable core, the desktop app, the web UI and the CLI are complete and tested — @DOCS_SYNC_TESTS@ automated tests pass and the code is @DOCS_SYNC_COVERAGE@% covered, with the full gate green in CI on every push.</p>",
+  "facts": {
+    "version": "1.0.0",
+    "release_date": "8 November 2026",
+    "tests_passed": 385,
+    "coverage": 72,
+    "ci_label": "the full gate is green in CI on every push"
+  }
+}
