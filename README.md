@@ -1,5 +1,7 @@
 # SigmaHelix
 
+![status](https://img.shields.io/badge/status-1.0.0%20released-brightgreen)
+
 A local-first personal operating system: tasks, notes, projects, calendar,
 launchers, and an assistant that runs on your own machine.
 
@@ -174,8 +176,6 @@ the tests agree on the same state.
 
 ## Status
 
-**Released: v1.0.0.** The durable core, the desktop app, the web UI and the CLI
-are complete and tested. Each `v*` tag publishes a built wheel and sdist
-automatically via the **Release** workflow (see the GitHub **Releases** page).
-The full gate — format, lint, types, compile, tests and CLI smoke — runs in CI on
-every push; see `docs/execution/LEDGER.yaml` for the gate history.
+<!-- docs-sync:start -->
+**Released: 1.0.0.** The durable core, the desktop app, the web UI and the CLI are complete and tested — 385 automated tests pass and the code is 72% covered. Each `v*` tag publishes a built wheel and sdist automatically via the **Release** workflow (see the GitHub **Releases** page). The full gate — format, lint, types, compile, tests and CLI smoke — runs in CI on every push; see `docs/execution/LEDGER.yaml` for the gate history.
+<!-- docs-sync:end -->
