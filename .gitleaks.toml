@@ -1,0 +1,24 @@
+# SigmaHelix-OS — gitleaks configuration
+#
+# Keeps the gitleaks built-in default rules and allowlists ONLY the synthetic
+# test fixtures that live in the redaction unit tests. Those fixtures are
+# intentionally fake credentials (a fake GitHub PAT, a fake JWT, a fake OpenAI
+# key, a fake RSA key whose body is the literal string "private-material", and a
+# placeholder "super-secret-value") used to verify that secrets are redacted
+# before storage. They are not live credentials, so they must not create noise
+# on every scan.
+
+[extend]
+# Pinned to a specific gitleaks release tag so the baseline is immutable and
+# does not change underneath us when the upstream default config changes.
+url = "https://raw.githubusercontent.com/gitleaks/gitleaks/v8.30.1/config/gitleaks.toml"
+
+[allowlist]
+description = "Synthetic fixtures in tests/core/test_logging.py and tests/app/test_metacognition.py used to exercise secret redaction. None are real credentials."
+regexes = [
+  '''ghp_1234567890abcdefghijklmnop''',
+  '''eyJabcdefghijk\.abcdefghijk\.abcdefghijk''',
+  '''sk-abcdefghijklmnop1234''',
+  '''super-secret-value''',
+  '''private-material''',
+]
