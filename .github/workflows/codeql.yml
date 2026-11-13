@@ -14,7 +14,9 @@ on:
     - cron: "41 2 * * 1"   # Monday 02:41 UTC
 
 permissions:
+  actions: read          # codeql-action reads its own workflow run for status reporting
   contents: read
+  packages: read         # required when CodeQL runs on a private repository
   security-events: write
 
 jobs:
