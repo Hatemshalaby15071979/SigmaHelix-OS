@@ -42,7 +42,7 @@ jobs:
           # queries: security-extended
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@9418214df1f2c4b8128c770156c409013b07d6b9  # v3.39.3, pinned to SHA
+        uses: github/codeql-action/autobuild@33d7b85da1a04171e211befe2c739303b9a4c066  # v3.39.3, pinned to SHA
 
       # The analysis runs regardless, but uploading results to code scanning
       # requires GitHub Advanced Security (code scanning) to be enabled for
