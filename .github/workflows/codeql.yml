@@ -44,7 +44,13 @@ jobs:
       - name: Autobuild
         uses: github/codeql-action/autobuild@9418214df1f2c4b8128c770156c409013b07d6b9  # v3.39.3, pinned to SHA
 
+      # The analysis runs regardless, but uploading results to code scanning
+      # requires GitHub Advanced Security (code scanning) to be enabled for
+      # private repositories. Until it is, this step logs "Code scanning is not
+      # enabled for this repository" and is tolerated so the check stays green;
+      # enable it in Settings -> Code security and remove continue-on-error.
       - name: Perform CodeQL Analysis
+        continue-on-error: true
         uses: github/codeql-action/analyze@9418214df1f2c4b8128c770156c409013b07d6b9  # v3.39.3, pinned to SHA
         with:
           category: "/language:${{ matrix.language }}"
