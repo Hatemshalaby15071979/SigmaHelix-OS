@@ -8,7 +8,7 @@ version = "1.0.0"
 description = "Local-first personal operating system: tasks, notes, projects, calendar, launchers and a local LLM assistant."
 readme = "README.md"
 requires-python = ">=3.11"
-license = "LicenseRef-Proprietary"
+license = "MIT"
 authors = [{ name = "SigmaHelix" }]
 keywords = ["local-first", "productivity", "sqlite", "ollama", "desktop"]
 classifiers = [
