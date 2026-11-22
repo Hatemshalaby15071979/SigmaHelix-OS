@@ -5,6 +5,6 @@
 # SigmaHelix
 
 <p float="left">
-  <strong>SigmaHelix<br></strong><br>
+  <strong>SigmaHelix</strong><br>
   <span style="font-size:0.9em;color:#93aaa0">by Helix Solutions</span>
 </p>
