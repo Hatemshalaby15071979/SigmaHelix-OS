@@ -1,8 +1,16 @@
+<div align="center">
+
+<img src="https://raw.githubusercontent.com/Hatemshalaby15071979/Helix-Solutions/main/assets/helix-solutions-logo.png" alt="Helix Solutions" width="72" height="72" style="margin-bottom:0.5rem">
+
 # SigmaHelix-OS
 
 A local-first personal operating system that runs on your own machine.
 
 ![Status](https://img.shields.io/badge/status-1.0.0%20released-brightgreen)
+
+*by Helix Solutions*
+
+</div>
 
 ## One-line identity
 
