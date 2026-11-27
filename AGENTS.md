@@ -237,3 +237,19 @@ Left undone: **The full pytest suite was not observed to finish here.** It ran p
 Also left undone, and it is the owner's call: `CONSTITUTION.md` here is this project's invariants text, not the shared portfolio philosophy that the other governed repositories carry. `GOVERNANCE.md` section 5 records that divergence explicitly instead of resolving it, because the constitution is owner-only and this file is referenced from code, docs and a hash baseline.
 
 Sensitive: `git push origin main` (owner's instruction in chat, 2026-11-27). No force push, no history rewrite, no secrets.
+
+## [2026-11-27 05:18 EET] — sami (OpenMausBot), CI repair (SigmaHelix-OS format gate)
+
+STATUS: SIGN-IN (work in progress)
+
+Task: Repair the red CI on `main` at commit `952a4ec`, which this landing itself caused. The `verify` job fails at step 5, "Check formatting" (`ruff format --check src tests scripts`), on all three Python matrix jobs; every later step is skipped, and the `package` job is skipped with them. The new `root-document hygiene` job passes.
+
+Touched: Will move `scripts/check_root_docs.py` to `.github/scripts/check_root_docs.py` and repoint the `governance` job; will append this entry and its sign-out to `AGENTS.md`. No other file changes.
+
+Why: The gate is a shared artefact that must stay byte-identical across the portfolio (md5 `35fc37ab16ff4461a33d4e2dcaedb7bf`), so it cannot be reformatted to suit one repository. This repository sets `line-length = 88` and includes `scripts` in its format check, so the file is the only one that "would be reformatted" — with it set aside, the same command reports 97 files already formatted. Helix-Solutions solved the identical collision the same way, by keeping the gate under `.github/scripts/`, which its format check does not cover. Fixing the file would have been the other option and is the wrong one: it would fork the shared text.
+
+Verification: Planned — `ruff format --check src tests scripts` clean, `python3 .github/scripts/check_root_docs.py` and `--self-test` green, then the GitHub Actions run on the repair commit with all `verify` steps reaching the tests.
+
+Left undone: Nothing at sign-in.
+
+Sensitive: `git push origin main` (owner's instruction in chat, 2026-11-27). No force push, no history rewrite.
