@@ -78,7 +78,7 @@ jobs:
     name: root-document hygiene
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Root-document hygiene (GOVERNANCE.md section 2)
         run: |
           python3 .github/scripts/check_root_docs.py
