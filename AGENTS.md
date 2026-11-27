@@ -210,7 +210,7 @@ STATUS: SIGN-IN (work in progress)
 
 Task: Bring this repository onto the portfolio governance standard, as the owner approved in chat on 2026-11-27 ("bring the remaining eleven onto the same governance standard"). This repository already had a root CONFIGURATION of AGENTS.md, CONSTITUTION.md, REPOMAP.md, GLOSSARY.md, CHANGELOG.md, LICENSE and SECURITY.md, but no GOVERNANCE.md and no root-document gate.
 
-Touched: Will add `GOVERNANCE.md`, `scripts/check_root_docs.py` and one `governance` job in `.github/workflows/ci.yml`; will append this entry and its sign-out to `AGENTS.md`. Nothing is moved, renamed or deleted.
+Touched: Will add `GOVERNANCE.md`, `.github/scripts/check_root_docs.py` and one `governance` job in `.github/workflows/ci.yml`; will append this entry and its sign-out to `AGENTS.md`. Nothing is moved, renamed or deleted.
 
 Why: Five repositories in the portfolio now share one rule — root holds only the documented set — enforced by one gate. This repository had the documents but no written policy for the root and no enforcement, so the rule could not be checked here. `CONSTITUTION.md` in this repository is the project's invariants text rather than the shared portfolio philosophy; that divergence is recorded in `GOVERNANCE.md` section 5 rather than resolved, because the constitution is owner-only.
 
@@ -226,11 +226,11 @@ STATUS: SIGN-OUT (landing complete)
 
 Task: Bring this repository onto the portfolio governance standard. Done.
 
-Touched: `GOVERNANCE.md` (new); `scripts/check_root_docs.py` (new, md5 `35fc37ab16ff4461a33d4e2dcaedb7bf`, byte-identical to the copy in Assay, createlee, Helix-Solutions, Helix-Matrix, Helix-Codex, work-samples and Mannschaft); `.github/workflows/ci.yml` (one new `governance` job); this ledger (heading plus sign-in and sign-out). Nothing was moved, renamed or deleted.
+Touched: `GOVERNANCE.md` (new); `.github/scripts/check_root_docs.py` (new, md5 `35fc37ab16ff4461a33d4e2dcaedb7bf`, byte-identical to the copy in Assay, createlee, Helix-Solutions, Helix-Matrix, Helix-Codex, work-samples and Mannschaft); `.github/workflows/ci.yml` (one new `governance` job); this ledger (heading plus sign-in and sign-out). Nothing was moved, renamed or deleted.
 
 Why: This repository already held the right root documents — README, AGENTS, CONSTITUTION, REPOMAP, GLOSSARY, CHANGELOG, LICENSE, SECURITY — but no written policy for the root and nothing enforcing it. It now has both. The two extra documents are **named in the section 2 table as required rather than moved**, because both are load-bearing: `AGENTS.md` and `CONSTITUTION.md` both require `REPOMAP.md` kept in sync with the tree, and `GLOSSARY.md` is hashed in `docs/audit/MERGE_BASELINE_2026-11-08.sha256`, so moving it would invalidate a recorded baseline.
 
-Verification: `scripts/check_root_docs.py` → "OK — SigmaHelix-OS/ holds only the GOVERNANCE.md section 2 set" (9 table rows, 9 allowed root documents); `--self-test` → 7/7 cases behaved. The `governance` job parses as valid YAML (jobs: `verify`, `package`, `governance`). `ruff check src tests scripts` → "All checks passed!"; `pytest --co` collects cleanly.
+Verification: `.github/scripts/check_root_docs.py` → "OK — SigmaHelix-OS/ holds only the GOVERNANCE.md section 2 set" (9 table rows, 9 allowed root documents); `--self-test` → 7/7 cases behaved. The `governance` job parses as valid YAML (jobs: `verify`, `package`, `governance`). `ruff check src tests scripts` → "All checks passed!"; `pytest --co` collects cleanly.
 
 Left undone: **The full pytest suite was not observed to finish here.** It ran past 280 seconds (the ceiling for a single command in this workspace) without completing, so this landing cannot claim a green suite from local evidence — the GitHub Actions run is the record. This is a workspace limit, not a known failure: the suite was still progressing with no error when the clock cut it. CI on `fbaa0ec` and the sign-out commit is the record of the same steps on a clean runner.
 
@@ -244,7 +244,7 @@ STATUS: SIGN-IN (work in progress)
 
 Task: Repair the red CI on `main` at commit `952a4ec`, which this landing itself caused. The `verify` job fails at step 5, "Check formatting" (`ruff format --check src tests scripts`), on all three Python matrix jobs; every later step is skipped, and the `package` job is skipped with them. The new `root-document hygiene` job passes.
 
-Touched: Will move `scripts/check_root_docs.py` to `.github/scripts/check_root_docs.py` and repoint the `governance` job; will append this entry and its sign-out to `AGENTS.md`. No other file changes.
+Touched: Will move `.github/scripts/check_root_docs.py` to `.github/scripts/check_root_docs.py` and repoint the `governance` job; will append this entry and its sign-out to `AGENTS.md`. No other file changes.
 
 Why: The gate is a shared artefact that must stay byte-identical across the portfolio (md5 `35fc37ab16ff4461a33d4e2dcaedb7bf`), so it cannot be reformatted to suit one repository. This repository sets `line-length = 88` and includes `scripts` in its format check, so the file is the only one that "would be reformatted" — with it set aside, the same command reports 97 files already formatted. Helix-Solutions solved the identical collision the same way, by keeping the gate under `.github/scripts/`, which its format check does not cover. Fixing the file would have been the other option and is the wrong one: it would fork the shared text.
 
