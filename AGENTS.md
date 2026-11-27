@@ -201,3 +201,21 @@ migration tests (`tests/core/test_migrations.py`) and extend
   session token. Keep that CSP when touching the route.
 - Run the gate before declaring work done; if a test fails, fix the code or the
   test's stale assumption, but never delete or disable tests to make it pass.
+
+## Ledger (sign-in / sign-out)
+
+## [2026-11-27 05:02 EET] — sami (OpenMausBot), owner-authorised governance landing
+
+STATUS: SIGN-IN (work in progress)
+
+Task: Bring this repository onto the portfolio governance standard, as the owner approved in chat on 2026-11-27 ("bring the remaining eleven onto the same governance standard"). This repository already had a root CONFIGURATION of AGENTS.md, CONSTITUTION.md, REPOMAP.md, GLOSSARY.md, CHANGELOG.md, LICENSE and SECURITY.md, but no GOVERNANCE.md and no root-document gate.
+
+Touched: Will add `GOVERNANCE.md`, `scripts/check_root_docs.py` and one `governance` job in `.github/workflows/ci.yml`; will append this entry and its sign-out to `AGENTS.md`. Nothing is moved, renamed or deleted.
+
+Why: Five repositories in the portfolio now share one rule — root holds only the documented set — enforced by one gate. This repository had the documents but no written policy for the root and no enforcement, so the rule could not be checked here. `CONSTITUTION.md` in this repository is the project's invariants text rather than the shared portfolio philosophy; that divergence is recorded in `GOVERNANCE.md` section 5 rather than resolved, because the constitution is owner-only.
+
+Verification: Planned — `python3 scripts/check_root_docs.py` and `--self-test` locally, then `./scripts/ci.sh`, then the GitHub Actions run on the landing commit.
+
+Left undone: Nothing at sign-in.
+
+Sensitive: `git push origin main` (owner's instruction in chat, 2026-11-27). No force push, no history rewrite, no secrets.
