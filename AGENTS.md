@@ -253,3 +253,19 @@ Verification: Planned — `ruff format --check src tests scripts` clean, `python
 Left undone: Nothing at sign-in.
 
 Sensitive: `git push origin main` (owner's instruction in chat, 2026-11-27). No force push, no history rewrite.
+
+## [2026-11-27 05:18 EET] — sami (OpenMausBot), CI repair (SigmaHelix-OS format gate)
+
+STATUS: SIGN-OUT (repair complete)
+
+Task: Repair the red CI at `952a4ec` that this landing caused. Done.
+
+Touched: `scripts/check_root_docs.py` → `.github/scripts/check_root_docs.py`; `.github/workflows/ci.yml` (the `governance` job's two commands repointed); `GOVERNANCE.md`, `CHANGELOG.md`, this ledger (every reference to the old path updated). No other change.
+
+Why: This repository's format gate covers `src tests scripts` at `line-length = 88`, so an 88-column-unclean file placed under `scripts/` fails it. The gate is a shared artefact that must stay byte-identical across the portfolio, so the file cannot be reformatted to suit one repository — the fix is to put it where this repository's format gate does not look, which is exactly what Helix-Solutions does with `.github/scripts/`.
+
+Verification: `ruff format --check src tests scripts` → "97 files already formatted"; `ruff check src tests scripts` → "All checks passed!"; `python3 .github/scripts/check_root_docs.py` → "OK — SigmaHelix-OS/ holds only the GOVERNANCE.md section 2 set"; `--self-test` → 7/7 cases behaved; md5 of the gate is still `35fc37ab16ff4461a33d4e2dcaedb7bf`, unchanged, so the shared text did not fork. CI on `ade572e` is the record on a clean runner.
+
+Left undone: Nothing, once that run is green. The full pytest suite still exceeds what this workspace can run in one command; it is exercised in CI.
+
+Sensitive: `git push origin main` (owner's instruction in chat, 2026-11-27). No force push, no history rewrite.
