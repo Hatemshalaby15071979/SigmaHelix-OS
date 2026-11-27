@@ -219,3 +219,21 @@ Verification: Planned — `python3 scripts/check_root_docs.py` and `--self-test`
 Left undone: Nothing at sign-in.
 
 Sensitive: `git push origin main` (owner's instruction in chat, 2026-11-27). No force push, no history rewrite, no secrets.
+
+## [2026-11-27 05:16 EET] — sami (OpenMausBot), owner-authorised governance landing
+
+STATUS: SIGN-OUT (landing complete)
+
+Task: Bring this repository onto the portfolio governance standard. Done.
+
+Touched: `GOVERNANCE.md` (new); `scripts/check_root_docs.py` (new, md5 `35fc37ab16ff4461a33d4e2dcaedb7bf`, byte-identical to the copy in Assay, createlee, Helix-Solutions, Helix-Matrix, Helix-Codex, work-samples and Mannschaft); `.github/workflows/ci.yml` (one new `governance` job); this ledger (heading plus sign-in and sign-out). Nothing was moved, renamed or deleted.
+
+Why: This repository already held the right root documents — README, AGENTS, CONSTITUTION, REPOMAP, GLOSSARY, CHANGELOG, LICENSE, SECURITY — but no written policy for the root and nothing enforcing it. It now has both. The two extra documents are **named in the section 2 table as required rather than moved**, because both are load-bearing: `AGENTS.md` and `CONSTITUTION.md` both require `REPOMAP.md` kept in sync with the tree, and `GLOSSARY.md` is hashed in `docs/audit/MERGE_BASELINE_2026-11-08.sha256`, so moving it would invalidate a recorded baseline.
+
+Verification: `scripts/check_root_docs.py` → "OK — SigmaHelix-OS/ holds only the GOVERNANCE.md section 2 set" (9 table rows, 9 allowed root documents); `--self-test` → 7/7 cases behaved. The `governance` job parses as valid YAML (jobs: `verify`, `package`, `governance`). `ruff check src tests scripts` → "All checks passed!"; `pytest --co` collects cleanly.
+
+Left undone: **The full pytest suite was not observed to finish here.** It ran past 280 seconds (the ceiling for a single command in this workspace) without completing, so this landing cannot claim a green suite from local evidence — the GitHub Actions run is the record. This is a workspace limit, not a known failure: the suite was still progressing with no error when the clock cut it. CI on `fbaa0ec` and the sign-out commit is the record of the same steps on a clean runner.
+
+Also left undone, and it is the owner's call: `CONSTITUTION.md` here is this project's invariants text, not the shared portfolio philosophy that the other governed repositories carry. `GOVERNANCE.md` section 5 records that divergence explicitly instead of resolving it, because the constitution is owner-only and this file is referenced from code, docs and a hash baseline.
+
+Sensitive: `git push origin main` (owner's instruction in chat, 2026-11-27). No force push, no history rewrite, no secrets.
